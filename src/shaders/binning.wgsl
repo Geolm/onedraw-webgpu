@@ -3,7 +3,7 @@
 struct aabb
 {
     min : vec2<f32>,
-    max : vec2<f32>,
+    max : vec2<f32>
 };
 
 struct obb
@@ -11,9 +11,8 @@ struct obb
     axis_i : vec2<f32>,
     axis_j : vec2<f32>,
     center : vec2<f32>,
-    extents : vec2<f32>,
+    extents : vec2<f32>
 }
-
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Helpers
@@ -82,7 +81,7 @@ fn edge_separation(e0: vec2<f32>, e1: vec2<f32>, refp: vec2<f32>, box_corners: a
     var all_opposite = true;
     if (ref_dist > 0.0) 
     {
-        for (var i: i32 = 0; i < 4; i = i + 1) 
+        for (var i: u32 = 0; i < 4; i = i + 1) 
         {
             if (edge_distance(box_corners[i], e0, e1) >= 0.0) 
             {
@@ -91,7 +90,7 @@ fn edge_separation(e0: vec2<f32>, e1: vec2<f32>, refp: vec2<f32>, box_corners: a
         }
     } else if (ref_dist < 0.0) 
     {
-        for (var i: i32 = 0; i < 4; i = i + 1) 
+        for (var i: u32 = 0; i < 4; i = i + 1) 
         {
             if (edge_distance(box_corners[i], e0, e1) <= 0.0) 
             {
@@ -116,7 +115,7 @@ fn intersection_aabb_ray(box: aabb, origin: vec2<f32>, direction: vec2<f32>) -> 
     var tmin: f32 = 0.0;
     var tmax: f32 = 1e10;
 
-    for (var i: i32 = 0; i < 2; i = i + 1) 
+    for (var i: u32 = 0; i < 2; i = i + 1) 
     {
         let inv_dir = 1.0 / direction[i];
         var t1 = (box.min[i] - origin[i]) * inv_dir;
@@ -245,7 +244,7 @@ fn intersection_aabb_pie(box: aabb, center: vec2<f32>, direction: vec2<f32>, ape
         vec2<f32>(box.max.x, box.min.y)
     );
 
-    for (var i: i32 = 0; i < 4; i = i + 1) 
+    for (var i: u32 = 0; i < 4; i = i + 1) 
     {
         let center_vertex = normalize(aabb_vertices[i] - center);
         if (dot(center_vertex, direction) > aperture.y) 
@@ -314,7 +313,7 @@ fn is_aabb_inside_ellipse(p0: vec2<f32>, p1: vec2<f32>, width: f32, box: aabb) -
 
     let obox = compute_obb(p0, p1, width);
 
-    for (var i: i32 = 0; i < 4; i = i + 1) 
+    for (var i: u32 = 0; i < 4; i = i + 1) 
     {
         let vertex_ellipse_space = obb_transform(obox, aabb_vertices[i]);
         let distance = square(vertex_ellipse_space.x) / square(obox.extents.x) +
@@ -337,7 +336,7 @@ fn is_aabb_inside_triangle(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, box: aab
         vec2<f32>(box.max.x, box.min.y)
     );
 
-    for (var i: i32 = 0; i < 4; i = i + 1) 
+    for (var i: u32 = 0; i < 4; i = i + 1) 
     {
         let d0 = edge_distance(p0, p1, aabb_vertices[i]);
         let d1 = edge_distance(p1, p2, aabb_vertices[i]);
@@ -366,7 +365,7 @@ fn is_aabb_inside_obb(p0: vec2<f32>, p1: vec2<f32>, width: f32, box: aabb) -> bo
 
     let obox = compute_obb(p0, p1, width);
 
-    for (var i: i32 = 0; i < 4; i = i + 1) 
+    for (var i: u32 = 0; i < 4; i = i + 1) 
     {
         let point = obb_transform(obox, aabb_vertices[i]);
         if (any(abs(point) > obox.extents)) 
@@ -387,7 +386,7 @@ fn is_aabb_inside_pie(center: vec2<f32>, direction: vec2<f32>, aperture: vec2<f3
         vec2<f32>(box.max.x, box.min.y)
     );
 
-    for (var i: i32 = 0; i < 4; i = i + 1) 
+    for (var i: u32 = 0; i < 4; i = i + 1) 
     {
         if (!point_in_pie(center, direction, radius, aperture.y, aabb_vertices[i])) 
         {
@@ -396,4 +395,48 @@ fn is_aabb_inside_pie(center: vec2<f32>, direction: vec2<f32>, aperture: vec2<f3
     }
     return true;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Tile binning
+// ---------------------------------------------------------------------------------------------------------------------------
+
+struct draw_command 
+{
+    data_index : u32,
+    flags      : u32 // extra (8) | clip_index (8) | fillmode (8) | type (8)
+};
+
+fn get_extra(cmd: draw_command) -> u32  {return cmd.flags & 0xFFu;}
+fn get_clip(cmd: draw_command) -> u32 {return (cmd.flags >> 8u) & 0xFFu;}
+fn get_fillmode(cmd: draw_command) -> u32 {return (cmd.flags >> 16u) & 0xFFu;}
+fn get_type(cmd: draw_command) -> u32 {return (cmd.flags >> 24u) & 0xFFu;}
+
+struct tile_node
+{
+    next          : u32,
+    command_index : u32 // command index + command type
+};
+
+fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}
+fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}
+
+struct counters
+{
+    num_nodes : atomic<u32>,
+    num_tiles : atomic<u32>
+};
+
+@group(0) @binding(0)
+var<storage, read> g_commands : array<draw_command>;
+
+@group(0) @binding(1)
+var<storage, write> g_tile_nodes : array<tile_node>;
+
+@group(0) @binding(2)
+var<storage, read_write> g_tile_indices : array<u32>;
+
+@group(0) @binding(3)
+var<storage, read_write> g_counters : counters;
+
+
 
