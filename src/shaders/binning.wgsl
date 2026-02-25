@@ -379,7 +379,8 @@ fn is_aabb_inside_obb(p0: vec2<f32>, p1: vec2<f32>, width: f32, box: aabb) -> bo
 // ---------------------------------------------------------------------------------------------------------------------------
 fn is_aabb_inside_pie(center: vec2<f32>, direction: vec2<f32>, aperture: vec2<f32>, radius: f32, box: aabb) -> bool 
 {
-    let aabb_vertices: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
+    let aabb_vertices: array<vec2<f32>, 4> = array<vec2<f32>, 4>
+    (
         box.min,
         box.max,
         vec2<f32>(box.min.x, box.max.y),
@@ -430,7 +431,7 @@ struct counters
 var<storage, read> g_commands : array<draw_command>;
 
 @group(0) @binding(1)
-var<storage, write> g_tile_nodes : array<tile_node>;
+var<storage, read_write> g_tile_nodes : array<tile_node>;
 
 @group(0) @binding(2)
 var<storage, read_write> g_tile_indices : array<u32>;
@@ -438,5 +439,6 @@ var<storage, read_write> g_tile_indices : array<u32>;
 @group(0) @binding(3)
 var<storage, read_write> g_counters : counters;
 
-
+@group(0) @binding(4)
+var<storage, read> g_quantized_aabb : array<u32>;
 
