@@ -1,3 +1,8 @@
+// ---------------------------------------------------------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------------------------------------------------------
+
+const TILE_SIZE: f32 = 16.0;
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Helpers
@@ -41,7 +46,6 @@ fn linear_to_srgb(color: vec4<f32>) -> vec4<f32>
 // ---------------------------------------------------------------------------------------------------------------------------
 // Signed distance functions
 // ---------------------------------------------------------------------------------------------------------------------------
-
 
 fn erf_approx(x: f32) -> f32 
 {
@@ -106,4 +110,72 @@ fn smooth_minimum(a_in: f32, b_in: f32, k: f32) -> vec2<f32>
     return vec2<f32>(min(a, b), select(1.0, 0.0, a < b));
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------
+// Vertex shader
+// ---------------------------------------------------------------------------------------------------------------------------
 
+struct vs_out 
+{
+    @builtin(position) pos: vec4<f32>,
+    @location(0) @interpolate(flat) tile_index: u32
+};
+
+struct draw_args 
+{
+    num_tile_width: u32,
+    screen_div: vec2<f32>
+};
+
+@group(1) @binding(0)
+var<uniform> input: g_draw_args;
+
+@group(0) @binding(2)
+var<storage, read> g_tile_indices : array<u32>;
+
+@vertex
+fn tile_vs(@builtin(instance_index) instance_id: u32, @builtin(vertex_index) vertex_id: u32) -> vs_out
+{
+    var out: vs_out;
+
+    let tile_index = g_tile_indices[instance_id];
+    let tile_x = tile_index % g_draw_args.num_tile_width;
+    let tile_y = tile_index / g_draw_args.num_tile_width;
+
+    var screen_pos = vec2<f32>(f32(vertex_id & 1u), f32(vertex_id >> 1u));
+
+    screen_pos += vec2<f32>(f32(tile_x), f32(tile_y));
+    screen_pos *= TILE_SIZE;
+
+    var clipspace = screen_pos * g_draw_args.screen_div;
+    clipspace = clipspace * 2.0 - vec2<f32>(1.0);
+    clipspace.y = -clipspace.y;
+
+    out.pos = vec4<f32>(clipspace, 0.0, 1.0);
+    out.tile_index = tile_index;
+
+    return out;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Fragment shader
+// ---------------------------------------------------------------------------------------------------------------------------
+
+@fragment
+fn tile_fs(in: vs_out) -> @location(0) vec4<f32> 
+{
+
+    var output = vec4<f32>(0.0);
+
+    // You must port:
+    // - tiles buffer as storage buffer
+    // - draw commands array
+    // - clip logic
+    // - command switch
+    // - glyph sampling
+    // - group blending logic
+
+    // WGSL sampling example:
+    // textureSample(atlas, atlas_sampler, uv, layer)
+
+    return output;
+}
