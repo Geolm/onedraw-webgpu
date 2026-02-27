@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.25)
 project(onedraw_webgpu)
 
 set(CMAKE_C_STANDARD 11)
@@ -34,3 +34,7 @@ endif()
 include_directories(${WGPU_DIR}/include)
 include_directories(${WGPU_DIR}/include/webgpu)
 include_directories(${WGPU_DIR}/include/wgpu)
+
+if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    add_subdirectory(prebuild)
+endif()
