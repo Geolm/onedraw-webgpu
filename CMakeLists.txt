@@ -38,3 +38,37 @@ include_directories(${WGPU_DIR}/include/wgpu)
 if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
     add_subdirectory(prebuild)
 endif()
+
+macro(setup_app app)
+    if(APPLE)
+        target_link_libraries(${app}
+                "${WGPU_DIR}/lib/libwgpu_native.a"
+                "-framework QuartzCore"
+                "-framework Cocoa"
+                "-framework MetalKit"
+                "-framework Metal")
+    endif()
+
+    if(WIN32)
+        target_link_libraries(${app} "${WGPU_DIR}/lib/wgpu_native.lib" Opengl32 ws2_32 D3DCompiler BCrypt Ntdll Userenv RuntimeObject Propsys)
+        # Copy wgpu_native.dll where we produce the binary for the executable:
+        add_custom_command(TARGET ${app} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${WGPU_DIR}/lib/wgpu_native.dll
+                $<TARGET_FILE_DIR:${app}>
+        )
+    endif()
+endmacro()
+
+# --- Minimal ---
+add_executable(minimal
+    ./lib/onedraw.c
+    ./tests/minimal.c
+    ./tests/sokol_app.mm
+)
+
+if(TARGET build_lib)
+    add_dependencies(minimal build_lib)
+endif()
+
+setup_app(minimal)
