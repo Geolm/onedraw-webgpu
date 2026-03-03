@@ -10,13 +10,13 @@ struct onedraw* renderer;
 
 void init(void)
 {
-    // renderer = od_init( &(onedraw_def)
-    // {
-    //     .metal_device = (void*)sapp_metal_get_device(),
-    //     .preallocated_buffer = malloc(od_min_memory_size()),
-    //     .viewport_width = (uint32_t) sapp_width(),
-    //     .viewport_height = (uint32_t) sapp_height()
-    // });
+    renderer = od_init( &(onedraw_def)
+    {
+        .device = (WGPUDevice*) sapp_wgpu_get_device(),
+        .preallocated_buffer = malloc(od_min_memory_size()),
+        .viewport_width = (uint32_t) sapp_width(),
+        .viewport_height = (uint32_t) sapp_height()
+    });
 }
 
 void frame(void)
@@ -28,8 +28,8 @@ void frame(void)
 
 void cleanup(void)
 {
-    // od_terminate(renderer);
-    // free(renderer);
+    od_terminate(renderer);
+    free(renderer);
 }
 
 sapp_desc sokol_main(int argc, char* argv[])
