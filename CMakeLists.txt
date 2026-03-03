@@ -61,10 +61,20 @@ macro(setup_app app)
 endmacro()
 
 # --- Minimal ---
+if(APPLE)
+    enable_language(OBJCXX)
+
+    set_source_files_properties(
+        ./tests/sokol_native_webgpu.c
+        PROPERTIES LANGUAGE OBJCXX
+    )
+endif()
+
+
 add_executable(minimal
     ./lib/onedraw.c
     ./tests/minimal.c
-    ./tests/sokol_app.mm
+    ./tests/sokol_native_webgpu.c
 )
 
 if(TARGET build_lib)

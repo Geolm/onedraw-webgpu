@@ -12,7 +12,7 @@ void init(void)
 {
     renderer = od_init( &(onedraw_def)
     {
-        .device = (WGPUDevice*) sapp_wgpu_get_device(),
+        .device = NULL,
         .preallocated_buffer = malloc(od_min_memory_size()),
         .viewport_width = (uint32_t) sapp_width(),
         .viewport_height = (uint32_t) sapp_height()
