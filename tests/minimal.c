@@ -33,6 +33,7 @@ void cleanup(void)
 {
     od_terminate(renderer);
     free(renderer);
+    terminate_webgpu(&wgpu);
 }
 
 sapp_desc sokol_main(int argc, char* argv[])
