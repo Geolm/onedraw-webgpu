@@ -152,8 +152,8 @@ void od_begin_frame(struct onedraw* r);
 void od_end_frame(struct onedraw* r, WGPUTextureView target_view);
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// Returns the average gpu time for the last 60 frames
-float od_get_average_gputime(struct onedraw* r);
+// Returns the gpu time in ms
+float od_get_gputime(struct onedraw* r);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Frees GPU and CPU memory used by the renderer

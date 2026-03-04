@@ -43,6 +43,8 @@
 #define VEC2_PI (3.14159265f)
 #define TESSELATION_STACK_MAX (1024U)
 #define COLINEAR_THRESHOLD (.1f)
+#define FRAME_COUNT (3)
+#define MAX_GLYPHS (128)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -54,11 +56,109 @@
 // Private structures
 // ---------------------------------------------------------------------------------------------------------------------------
 
+typedef struct {float x, y, z, w;} float4;
+typedef uint32_t quantized_aabb;
+typedef enum sdf_operator {op_additive, op_subtractive} sdf_operator;
+
+typedef struct dynamic_buffer
+{
+    WGPUBuffer buffers[FRAME_COUNT];
+} dynamic_buffer;
+
 struct onedraw
 {
     WGPUDevice device;
+    WGPUQueue command_queue;
+    WGPUCommandBuffer command_buffer;
 
+    struct
+    {
+        dynamic_buffer buffer;
+        dynamic_buffer colors;
+        dynamic_buffer aabb_buffer;
+        dynamic_buffer data_buffer;
+        dynamic_buffer clipshapes_buffer;
+        uint32_t count;
+        quantized_aabb* group_aabb;
+    } commands;
 
+    // region binning
+    struct
+    {
+        uint16_t num_width;
+        uint16_t num_height;
+        uint16_t count;
+        uint32_t num_groups;
+    } regions;
+
+    // tile binning
+    struct 
+    {
+        WGPUBuffer head; 
+        WGPUComputePipeline binning_pso;
+        WGPUComputePipeline write_indirect_buffer_pso;
+        WGPUBuffer counters_buffer;
+        WGPUBuffer indirect_arg;
+        WGPUBuffer indices;
+        WGPUBuffer nodes;
+        WGPUBuffer indirect_draw_params;
+        uint16_t num_width;
+        uint16_t num_height;
+        uint32_t count;
+        bool culling_debug;
+    } tiles;
+
+    // rasterizer
+    struct
+    {
+        WGPURenderPipeline pso;
+        WGPUDepthStencilState depth_stencil_state;
+        WGPUTexture atlas;
+        float4 clear_color;
+        uint16_t width;
+        uint16_t height;
+        float aa_width;
+        sdf_operator group_op;
+        float outline_width;
+        bool srgb_backbuffer;
+        bool clear_backbuffer;
+    } rasterizer;
+
+    // font
+    struct
+    {
+        WGPUTexture texture;
+        WGPUBuffer glyphs;
+        struct 
+        {
+            od_glyph glyphs[MAX_GLYPHS];
+            float font_height;
+            uint16_t num_glyphs;
+            uint16_t first_glyph;
+            uint16_t texture_width;
+            uint16_t texture_height;
+        } desc;
+    } font;
+
+    // screenshot service
+    struct
+    {
+        WGPUTexture texture;
+        void* out_pixels;
+        uint32_t region_x, region_y;
+        uint32_t region_width, region_height;
+        bool show_region;
+        bool capture_image;
+        bool allocate_resources;
+    } screenshot;
+
+    // stats
+    struct
+    {
+        uint32_t peak_num_draw_cmd;
+        uint32_t num_draw_data;
+        uint32_t frame_index;
+    } stats;
 
     void (*custom_log)(const char* string);
     char string_buffer[STRING_BUFFER_SIZE];
@@ -217,6 +317,16 @@ size_t od_min_memory_size(void)
     return sizeof(struct onedraw);
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_build_pso(struct onedraw* r)
+{
+
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// public functions
+// ---------------------------------------------------------------------------------------------------------------------------
+
 //----------------------------------------------------------------------------------------------------------------------------
 struct onedraw* od_init(onedraw_def* def)
 {
@@ -226,10 +336,16 @@ struct onedraw* od_init(onedraw_def* def)
 
     struct onedraw* r = (struct onedraw*) def->preallocated_buffer;
 
+    // clear everything to zero
+    *r = (struct onedraw) {0};
+
     r->custom_log = def->log_func;
     r->device = def->device;
+    r->rasterizer.aa_width = VEC2_SQR2;
+    r->rasterizer.clear_backbuffer = true;
+    r->rasterizer.clear_color = (float4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
     
-    // od_build_pso(r);
+    od_build_pso(r);
     // od_build_font(r);
     // od_build_depthstencil_state(r);
     // od_resize(r, def->viewport_width, def->viewport_height);
@@ -238,6 +354,83 @@ struct onedraw* od_init(onedraw_def* def)
     //     od_create_atlas(r, def->atlas.width, def->atlas.height, def->atlas.num_slices);
 
     return r;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_index)
+{
+    assert_msg(0, "not yet implemented");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_set_capture_region(struct onedraw* r, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    assert_msg(0, "not yet implemented");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_get_capture_region_dimensions(struct onedraw *r, uint32_t* width, uint32_t* height)
+{
+    assert_msg(0, "not yet implemented");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_take_screenshot(struct onedraw* r, void* out_pixels)
+{
+    assert_msg(0, "not yet implemented");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
+{
+    assert_msg(0, "not yet implemented");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_begin_frame(struct onedraw* r)
+{
+    r->stats.frame_index++;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
+{
+    WGPUCommandEncoderDescriptor encoder_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
+
+    WGPURenderPassColorAttachment color_attachment = {0};
+    color_attachment.view = target_view;
+    color_attachment.resolveTarget = NULL;
+    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.clearValue = (WGPUColor){r->rasterizer.clear_color.x, r->rasterizer.clear_color.y, r->rasterizer.clear_color.z, r->rasterizer.clear_color.w};
+
+    WGPURenderPassDescriptor render_pass_desc = {0};
+    render_pass_desc.colorAttachmentCount = 1;
+    render_pass_desc.colorAttachments = &color_attachment;
+    render_pass_desc.depthStencilAttachment = NULL;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
+
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+
+    WGPUCommandBufferDescriptor cmd_buffer_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
+
+    wgpuCommandEncoderRelease(encoder);
+
+    WGPUQueue queue = wgpuDeviceGetQueue(r->device);
+    wgpuQueueSubmit(queue, 1, &cmd);
+
+    wgpuCommandBufferRelease(cmd);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+float od_get_gputime(struct onedraw* r)
+{
+    assert(false);
+    return 0;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
