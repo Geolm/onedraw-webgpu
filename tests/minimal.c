@@ -24,9 +24,22 @@ void init(void)
 
 void frame(void)
 {
+    WGPUSurfaceTexture surfaceTexture;
+    wgpuSurfaceGetCurrentTexture(wgpu.surface, &surfaceTexture);
+
+    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+        surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+        return;
+
+    WGPUTextureView frame = wgpuTextureCreateView(surfaceTexture.texture, NULL);
+
     od_begin_frame(renderer);
     // od_draw_text(renderer, 0, 0, "Hello world!", 0xffffffff);
-    //od_end_frame(renderer, (void*)sapp_metal_get_current_drawable());
+    od_end_frame(renderer, frame);
+
+    wgpuSurfacePresent(wgpu.surface);
+    wgpuTextureViewRelease(frame);
+    wgpuTextureRelease(surfaceTexture.texture);
 }
 
 void cleanup(void)

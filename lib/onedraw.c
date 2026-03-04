@@ -404,6 +404,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     color_attachment.loadOp = WGPULoadOp_Clear;
     color_attachment.storeOp = WGPUStoreOp_Store;
     color_attachment.clearValue = (WGPUColor){r->rasterizer.clear_color.x, r->rasterizer.clear_color.y, r->rasterizer.clear_color.z, r->rasterizer.clear_color.w};
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 
     WGPURenderPassDescriptor render_pass_desc = {0};
     render_pass_desc.colorAttachmentCount = 1;
