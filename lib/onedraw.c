@@ -56,7 +56,7 @@
 
 struct onedraw
 {
-    WGPUDevice* device;
+    WGPUDevice device;
 
 
 
