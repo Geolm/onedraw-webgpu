@@ -66,7 +66,7 @@ typedef struct od_glyph
 typedef struct onedraw_def
 {
     void* preallocated_buffer;
-    WGPUDevice* device;
+    WGPUDevice device;
     uint32_t viewport_width;
     uint32_t viewport_height;
     void (*log_func)(const char* string);

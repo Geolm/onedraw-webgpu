@@ -1,18 +1,21 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define SOKOL_WGPU
 #include "sokol_app.h"
+#include "sokol_native_webgpu.h"
 
 #include "../lib/onedraw.h"
 
 struct onedraw* renderer;
+struct webgpu_platform wgpu;
 
 void init(void)
 {
+    init_webgpu(&wgpu);
+
     renderer = od_init( &(onedraw_def)
     {
-        .device = NULL,
+        .device = wgpu.device,
         .preallocated_buffer = malloc(od_min_memory_size()),
         .viewport_width = (uint32_t) sapp_width(),
         .viewport_height = (uint32_t) sapp_height()

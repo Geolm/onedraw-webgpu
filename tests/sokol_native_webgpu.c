@@ -22,7 +22,22 @@ static void request_adapter_callback(WGPURequestAdapterStatus status, WGPUAdapte
     } 
     else 
     {
-        fprintf(stderr, "Failed to get adapter: %s\n", message.data);
+        fprintf(stderr, "failed to get adapter: %s\n", message.data);
+        exit(1);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+static void request_device_callback(WGPURequestDeviceStatus status, WGPUDevice received,  WGPUStringView message, void* userdata1, void* userdata2)
+{
+    webgpu_platform* wgpu = (webgpu_platform*) userdata1;
+    if (status == WGPURequestDeviceStatus_Success) 
+    {
+        wgpu->device = received;
+    } 
+    else 
+    {
+        fprintf(stderr, "failed to get device: %s\n", message.data);
         exit(1);
     }
 }
@@ -39,15 +54,27 @@ void init_webgpu(webgpu_platform* wgpu)
     adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
     adapter_opts.compatibleSurface = NULL; // no surface yet
 
-    WGPURequestAdapterCallbackInfo cb_info = 
+    WGPURequestAdapterCallbackInfo adapter_cb_info = 
     {
         .callback = request_adapter_callback,
         .mode = WGPUCallbackMode_AllowProcessEvents,
         .userdata1 = wgpu
     };
 
-    wgpuInstanceRequestAdapter(wgpu->instance, &adapter_opts, cb_info);
+    wgpuInstanceRequestAdapter(wgpu->instance, &adapter_opts, adapter_cb_info);
     while (wgpu->adapter == NULL) 
+        wgpuInstanceProcessEvents(wgpu->instance);
+
+    WGPURequestDeviceCallbackInfo device_cb_info =
+    {
+        .callback = request_device_callback,
+        .mode = WGPUCallbackMode_AllowProcessEvents,
+        .userdata1 = wgpu
+    };
+
+    WGPUDeviceDescriptor device_desc = {};
+    wgpuAdapterRequestDevice(wgpu->adapter, &device_desc, device_cb_info);
+    while (wgpu->device == NULL) 
         wgpuInstanceProcessEvents(wgpu->instance);
 }
 
