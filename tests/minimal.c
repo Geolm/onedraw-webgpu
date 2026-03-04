@@ -34,6 +34,7 @@ void cleanup(void)
     od_terminate(renderer);
     free(renderer);
     terminate_webgpu(&wgpu);
+    exit(0);    // sad but making obj-c refcount not a complain is a multiple weeks of job for no gain
 }
 
 sapp_desc sokol_main(int argc, char* argv[])

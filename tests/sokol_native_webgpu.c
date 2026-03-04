@@ -1,13 +1,11 @@
 
 #if defined(__APPLE__)
 #define SOKOL_METAL 1
-#else
-#define SOKOL_NOAPI 1
 #endif
 
+#define SOKOL_NOAPI 1
 #define SOKOL_APP_IMPL
 #include "sokol_app.h"
-
 
 #include "sokol_native_webgpu.h"
 #include <stdio.h>
