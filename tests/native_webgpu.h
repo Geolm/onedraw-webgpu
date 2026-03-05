@@ -1,6 +1,7 @@
 #ifndef SOKOL_NATIVE_WEBGPU
 
 #include <webgpu.h>
+#include <GLFW/glfw3.h>
 
 typedef struct webgpu_platform
 {
@@ -16,7 +17,7 @@ typedef struct webgpu_platform
 extern "C" {
 #endif
 
-void init_webgpu(webgpu_platform* wgpu);
+void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window);
 void terminate_webgpu(webgpu_platform* wgpu);
 
 #ifdef __cplusplus

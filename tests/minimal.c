@@ -1,25 +1,33 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
-#include "sokol_app.h"
-#include "sokol_native_webgpu.h"
+#include <GLFW/glfw3.h>
+
+#include "native_webgpu.h"
 
 #include "../lib/onedraw.h"
 
 struct onedraw* renderer;
 struct webgpu_platform wgpu;
+struct GLFWwindow* window;
 
 void init(void)
 {
-    init_webgpu(&wgpu);
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
+    init_webgpu(&wgpu, window);
 
     renderer = od_init( &(onedraw_def)
     {
         .device = wgpu.device,
         .preallocated_buffer = malloc(od_min_memory_size()),
-        .viewport_width = (uint32_t) sapp_width(),
-        .viewport_height = (uint32_t) sapp_height()
+        .viewport_width = (uint32_t) width,
+        .viewport_height = (uint32_t) height
     });
+
+    od_set_clear_color(renderer, 0xff457623);
 }
 
 void frame(void)
@@ -28,7 +36,7 @@ void frame(void)
     wgpuSurfaceGetCurrentTexture(wgpu.surface, &surfaceTexture);
 
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
-        surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+        surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
         return;
 
     WGPUTextureView frame = wgpuTextureCreateView(surfaceTexture.texture, NULL);
@@ -47,19 +55,29 @@ void cleanup(void)
     od_terminate(renderer);
     free(renderer);
     terminate_webgpu(&wgpu);
-    exit(0);    // sad but making obj-c refcount not a complain is a multiple weeks of job for no gain
+    exit(0);    // sad but making obj-c refcount not complain is a multiple weeks of job for no gain
 }
 
-sapp_desc sokol_main(int argc, char* argv[])
+int main(int argc, char* argv[])
 {
-    (void) argc;(void) argv;
+    glfwInit();
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
+    glfwWindowHint(GLFW_SAMPLES, 0);
 
-    return (sapp_desc) 
+    window = glfwCreateWindow(1280, 720, "onedraw-webgpu", NULL, NULL);
+    assert(window != NULL);
+
+    init();
+
+    while (!glfwWindowShouldClose(window))
     {
-        .width = 1280,
-        .height = 720,
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup
-    };
+        frame();
+        glfwPollEvents();
+    }
+
+    cleanup();
+
+    return 0;
 }

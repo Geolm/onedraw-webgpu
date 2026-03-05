@@ -62,20 +62,24 @@ endmacro()
 
 # --- Minimal ---
 if(APPLE)
-    enable_language(OBJCXX)
+    enable_language(OBJC)
 
     set_source_files_properties(
-        ./tests/sokol_native_webgpu.c
-        PROPERTIES LANGUAGE OBJCXX
+        ./tests/native_webgpu.c
+        PROPERTIES
+        COMPILE_FLAGS "-x objective-c -std=gnu11"
     )
 endif()
 
+find_package(glfw3 3.4 REQUIRED)
 
 add_executable(minimal
     ./lib/onedraw.c
     ./tests/minimal.c
-    ./tests/sokol_native_webgpu.c
+    ./tests/native_webgpu.c
 )
+
+target_link_libraries(minimal glfw)
 
 if(TARGET build_lib)
     add_dependencies(minimal build_lib)

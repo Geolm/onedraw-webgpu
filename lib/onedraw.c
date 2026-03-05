@@ -439,3 +439,33 @@ void od_terminate(struct onedraw* r)
 {
 
 }
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_get_stats(struct onedraw* r, od_stats* stats)
+{
+
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_set_clear_color(struct onedraw* r, draw_color srgb_color)
+{
+    float r8 = (float)(srgb_color & 0xFF) / 255.f;
+    float g8 = (float)((srgb_color >> 8) & 0xFF) / 255.f;
+    float b8 = (float)((srgb_color >> 16) & 0xFF) / 255.f;
+    float a8 = (float)((srgb_color >> 24) & 0xFF) / 255.f;
+
+    if (r->rasterizer.srgb_backbuffer)
+    {
+        r->rasterizer.clear_color.x = srgb_to_linear(r8);
+        r->rasterizer.clear_color.y = srgb_to_linear(g8);
+        r->rasterizer.clear_color.z = srgb_to_linear(b8);
+        r->rasterizer.clear_color.w = a8;
+    }
+    else
+    {
+        r->rasterizer.clear_color.x = r8;
+        r->rasterizer.clear_color.y = g8;
+        r->rasterizer.clear_color.z = b8;
+        r->rasterizer.clear_color.w = a8;
+    }
+}

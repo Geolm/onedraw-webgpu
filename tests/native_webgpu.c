@@ -1,14 +1,21 @@
+#include "native_webgpu.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-#if defined(__APPLE__)
-#define SOKOL_METAL 1
+#ifdef __APPLE__
+#define GLFW_EXPOSE_NATIVE_COCOA
 #endif
 
-#define SOKOL_NOAPI 1
-#define SOKOL_APP_IMPL
-#include "sokol_app.h"
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#endif
 
-#include "sokol_native_webgpu.h"
-#include <stdio.h>
+#ifdef GLFW_EXPOSE_NATIVE_COCOA
+#  include <Foundation/Foundation.h>
+#  include <QuartzCore/CAMetalLayer.h>
+#endif
+
+#include <GLFW/glfw3native.h>
 
 // ---------------------------------------------------------------------------------------------------------------------------
 static void request_adapter_callback(WGPURequestAdapterStatus status, WGPUAdapter received,  WGPUStringView message, void* userdata1, void* userdata2)
@@ -51,7 +58,7 @@ static void device_error_callback(WGPUDevice const* device, WGPUErrorType type, 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-void init_webgpu(webgpu_platform* wgpu)
+void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
 {
     *wgpu = (webgpu_platform) {};
 
@@ -60,27 +67,36 @@ void init_webgpu(webgpu_platform* wgpu)
     wgpu->instance = wgpuCreateInstance(&instance_desc);
 
     // Surface
-    WGPUSurfaceDescriptor surface_desc = {};
-
 #if defined(__APPLE__)
-    id metal_layer = NULL;
-    NSWindow *ns_window = reinterpret_cast<NSWindow*>(sapp_macos_get_window());
-    [ns_window.contentView setWantsLayer:YES];
-    metal_layer = [CAMetalLayer layer];
-    [ns_window.contentView setLayer:metal_layer];
-    WGPUSurfaceSourceMetalLayer layer = {};
-    layer.layer = metal_layer;
-    layer.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
+    id metal_layer = [CAMetalLayer layer];
+    NSWindow* ns_window = glfwGetCocoaWindow(window);
+    [ns_window.contentView setWantsLayer : YES] ;
+    [ns_window.contentView setLayer : metal_layer] ;
+
+    WGPUSurfaceSourceMetalLayer fromMetalLayer;
+    fromMetalLayer.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
+    fromMetalLayer.chain.next = NULL;
+    fromMetalLayer.layer = metal_layer;
+
+    WGPUSurfaceDescriptor surfaceDescriptor;
+    surfaceDescriptor.nextInChain = &fromMetalLayer.chain;
+    surfaceDescriptor.label = (WGPUStringView){ NULL, WGPU_STRLEN };
 #else
-    HINSTANCE hinstance =  GetModuleHandle(NULL);
-    WGPUSurfaceSourceWindowsHWND layer = {};
-    layer.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
-    layer.hinstance = hinstance;
-    layer.hwnd = (void*) sapp_win32_get_hwnd();
+    HWND hwnd = glfwGetWin32Window(window);
+    HINSTANCE hinstance = GetModuleHandle(NULL);
+
+    WGPUSurfaceSourceWindowsHWND fromWindowsHWND;
+    fromWindowsHWND.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
+    fromWindowsHWND.chain.next = NULL;
+    fromWindowsHWND.hinstance = hinstance;
+    fromWindowsHWND.hwnd = hwnd;
+
+    WGPUSurfaceDescriptor surfaceDescriptor;
+    surfaceDescriptor.nextInChain = &fromWindowsHWND.chain;
+    surfaceDescriptor.label = (WGPUStringView){ NULL, WGPU_STRLEN };
 #endif
 
-    surface_desc.nextInChain = &layer.chain;
-    wgpu->surface = wgpuInstanceCreateSurface(wgpu->instance, &surface_desc);
+    wgpu->surface = wgpuInstanceCreateSurface(wgpu->instance, &surfaceDescriptor);
 
     // Adapter
     WGPURequestAdapterOptions adapter_opts = 
