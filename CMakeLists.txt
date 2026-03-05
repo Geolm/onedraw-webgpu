@@ -7,6 +7,7 @@ set(CMAKE_C_FLAGS_RELEASE "-O3 -Wall -Wextra")
 set(WGPU_VERSION "27.0.4.0")
 set(WGPU_BUILD_TYPE "debug")  # or release
 
+# ---- wgpu ---
 if(APPLE)
     set(WGPU_PLATFORM "macos-aarch64")
 endif()
@@ -16,7 +17,6 @@ if(WIN32)
 endif()
 
 set(WGPU_URL https://github.com/gfx-rs/wgpu-native/releases/download/v${WGPU_VERSION}/wgpu-${WGPU_PLATFORM}-${WGPU_BUILD_TYPE}.zip)
-
 set(WGPU_DIR "${CMAKE_BINARY_DIR}/wgpu-native")
 
 if(NOT EXISTS ${WGPU_DIR})
@@ -39,6 +39,35 @@ if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
     add_subdirectory(prebuild)
 endif()
 
+# --- Objective-c poutine ---
+if(APPLE)
+    enable_language(OBJC)
+
+    set_source_files_properties(
+        ./tests/native_webgpu.c
+        PROPERTIES
+        COMPILE_FLAGS "-x objective-c -std=gnu11"
+    )
+endif()
+
+# --- GLFW ---
+include(FetchContent)
+
+FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG 3.4
+)
+
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(glfw)
+
+# --- Macro ---
+
 macro(setup_app app)
     if(APPLE)
         target_link_libraries(${app}
@@ -60,19 +89,7 @@ macro(setup_app app)
     endif()
 endmacro()
 
-# --- Minimal ---
-if(APPLE)
-    enable_language(OBJC)
-
-    set_source_files_properties(
-        ./tests/native_webgpu.c
-        PROPERTIES
-        COMPILE_FLAGS "-x objective-c -std=gnu11"
-    )
-endif()
-
-find_package(glfw3 3.4 REQUIRED)
-
+# --- Minimal app ---
 add_executable(minimal
     ./lib/onedraw.c
     ./tests/minimal.c
