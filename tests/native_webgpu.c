@@ -17,9 +17,13 @@
 
 #include <GLFW/glfw3native.h>
 
+#define UNUSED_VARIABLE(a) (void)(a)
+
 // ---------------------------------------------------------------------------------------------------------------------------
 static void request_adapter_callback(WGPURequestAdapterStatus status, WGPUAdapter received,  WGPUStringView message, void* userdata1, void* userdata2)
 {
+    UNUSED_VARIABLE(userdata2);
+
     webgpu_platform* wgpu = (webgpu_platform*) userdata1;
     if (status == WGPURequestAdapterStatus_Success) 
     {
@@ -35,6 +39,8 @@ static void request_adapter_callback(WGPURequestAdapterStatus status, WGPUAdapte
 // ---------------------------------------------------------------------------------------------------------------------------
 static void request_device_callback(WGPURequestDeviceStatus status, WGPUDevice received,  WGPUStringView message, void* userdata1, void* userdata2)
 {
+    UNUSED_VARIABLE(userdata2);
+
     webgpu_platform* wgpu = (webgpu_platform*) userdata1;
     if (status == WGPURequestDeviceStatus_Success) 
     {
@@ -50,11 +56,11 @@ static void request_device_callback(WGPURequestDeviceStatus status, WGPUDevice r
 // ---------------------------------------------------------------------------------------------------------------------------
 static void device_error_callback(WGPUDevice const* device, WGPUErrorType type, WGPUStringView message, void* userdata1, void* userdata2)
 {
-    fprintf(stderr,
-            "[WebGPU][%d] %.*s\n",
-            type,
-            (int)message.length,
-            message.data);
+    UNUSED_VARIABLE(device);
+    UNUSED_VARIABLE(userdata1);
+    UNUSED_VARIABLE(userdata2);
+
+    fprintf(stderr, "[WebGPU][%d] %.*s\n", type, (int)message.length, message.data);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------

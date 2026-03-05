@@ -55,11 +55,13 @@ void cleanup(void)
     od_terminate(renderer);
     free(renderer);
     terminate_webgpu(&wgpu);
-    exit(0);    // sad but making obj-c refcount not complain is a multiple weeks of job for no gain
 }
 
 int main(int argc, char* argv[])
 {
+    (void)(argc);
+    (void)(argv);
+
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
