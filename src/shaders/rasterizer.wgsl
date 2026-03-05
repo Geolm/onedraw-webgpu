@@ -166,16 +166,5 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
 
     var output = vec4<f32>(0.0);
 
-    // You must port:
-    // - tiles buffer as storage buffer
-    // - draw commands array
-    // - clip logic
-    // - command switch
-    // - glyph sampling
-    // - group blending logic
-
-    // WGSL sampling example:
-    // textureSample(atlas, atlas_sampler, uv, layer)
-
     return output;
 }
