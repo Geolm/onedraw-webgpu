@@ -119,7 +119,7 @@ bool build_font(float font_height, uint32_t atlas_width, uint32_t atlas_height, 
     else fprintf(stdout, "ok\n");
 
     // font atlas is uncompressed to target more platforms
-    if (!bin2h("lib/default_font_atlas.h", "default_font_atlas", font_data, atlas_width * atlas_height))
+    if (!bin2h("lib/default_font_atlas.h", "default_font_atlas", atlas_pixels, atlas_width * atlas_height))
         return false;
 
     fprintf(stdout, "filling glyphs structure : ");
