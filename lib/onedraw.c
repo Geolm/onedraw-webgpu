@@ -390,6 +390,7 @@ struct onedraw* od_init(onedraw_def* def)
 
     r->custom_log = def->log_func;
     r->device = def->device;
+    r->rasterizer.srgb_backbuffer = def->srgb_backbuffer;
     r->rasterizer.aa_width = VEC2_SQR2;
     r->rasterizer.clear_backbuffer = true;
     r->rasterizer.clear_color = (float4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};

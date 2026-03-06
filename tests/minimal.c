@@ -24,7 +24,8 @@ void init(void)
         .device = wgpu.device,
         .preallocated_buffer = malloc(od_min_memory_size()),
         .viewport_width = (uint32_t) width,
-        .viewport_height = (uint32_t) height
+        .viewport_height = (uint32_t) height,
+        .srgb_backbuffer = true
     });
 
     od_set_clear_color(renderer, 0xff457623);
