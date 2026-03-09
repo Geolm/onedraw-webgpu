@@ -412,30 +412,46 @@ struct onedraw* od_init(onedraw_def* def)
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_index)
 {
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(pixel_data);
+    UNUSED_VARIABLE(slice_index);
     assert_msg(0, "not yet implemented");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_set_capture_region(struct onedraw* r, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(x);
+    UNUSED_VARIABLE(y);
+    UNUSED_VARIABLE(width);
+    UNUSED_VARIABLE(height);
     assert_msg(0, "not yet implemented");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_get_capture_region_dimensions(struct onedraw *r, uint32_t* width, uint32_t* height)
 {
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(width);
+    UNUSED_VARIABLE(height);
     assert_msg(0, "not yet implemented");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_take_screenshot(struct onedraw* r, void* out_pixels)
 {
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(out_pixels);
     assert_msg(0, "not yet implemented");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 {
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(width);
+    UNUSED_VARIABLE(height);
     assert_msg(0, "not yet implemented");
 }
 
@@ -483,6 +499,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 //-----------------------------------------------------------------------------------------------------------------------------
 float od_get_gputime(struct onedraw* r)
 {
+    UNUSED_VARIABLE(r);
     assert(false);
     return 0;
 }
@@ -497,7 +514,8 @@ void od_terminate(struct onedraw* r)
 //----------------------------------------------------------------------------------------------------------------------------
 void od_get_stats(struct onedraw* r, od_stats* stats)
 {
-
+    UNUSED_VARIABLE(r);
+    UNUSED_VARIABLE(stats);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
