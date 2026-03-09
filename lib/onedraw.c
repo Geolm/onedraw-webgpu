@@ -56,7 +56,7 @@
 #define UNUSED_VARIABLE(a) (void)(a)
 #define SAFE_RELEASE(x, fn) if (x) { fn(x); x = NULL; }
 #if defined(_MSC_VER)
-#define OD_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#define OD_STATIC_ASSERT(cond, msg) assert_msg(cond, msg)
 #else
 #define OD_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
