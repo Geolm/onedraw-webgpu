@@ -47,6 +47,7 @@
 #define TESSELATION_STACK_MAX (1024U)
 #define COLINEAR_THRESHOLD (.1f)
 #define FRAME_COUNT (3)
+#define TILE_SIZE (16)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -111,8 +112,8 @@ struct onedraw
         WGPUBuffer indices;
         WGPUBuffer nodes;
         WGPUBuffer indirect_draw_params;
-        uint16_t num_width;
-        uint16_t num_height;
+        uint32_t num_width;
+        uint32_t num_height;
         uint32_t count;
         bool culling_debug;
     } tiles;
@@ -124,8 +125,8 @@ struct onedraw
         WGPUDepthStencilState depth_stencil_state;
         WGPUTexture atlas;
         float4 clear_color;
-        uint16_t width;
-        uint16_t height;
+        uint32_t width;
+        uint32_t height;
         float aa_width;
         sdf_operator group_op;
         float outline_width;
@@ -406,7 +407,7 @@ struct onedraw* od_init(onedraw_def* def)
     od_build_pso(r);
     od_build_font(r);
     // od_build_depthstencil_state(r);
-    // od_resize(r, def->viewport_width, def->viewport_height);
+    od_resize(r, def->viewport_width, def->viewport_height);
 
     // if (def->atlas.width != 0)
     //     od_create_atlas(r, def->atlas.width, def->atlas.height, def->atlas.num_slices);
@@ -454,10 +455,37 @@ void od_take_screenshot(struct onedraw* r, void* out_pixels)
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 {
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(width);
-    UNUSED_VARIABLE(height);
-    assert_msg(0, "not yet implemented");
+    if (width != r->rasterizer.width || height != r->rasterizer.height)
+    {
+        od_log(r, "resizing the framebuffer to %dx%d", width, height);
+
+        r->rasterizer.width = width;
+        r->rasterizer.height = height;
+        r->tiles.num_width = (width + TILE_SIZE - 1) / TILE_SIZE;
+        r->tiles.num_height = (height + TILE_SIZE - 1) / TILE_SIZE;
+        r->tiles.count = r->tiles.num_width * r->tiles.num_height;
+
+        // TODO : add region support
+
+        SAFE_RELEASE(r->tiles.head, wgpuBufferRelease);
+        r->tiles.head = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        {
+            .size = r->tiles.count * sizeof(uint32_t),
+            .usage = WGPUBufferUsage_Storage
+        });
+
+        SAFE_RELEASE(r->tiles.indices, wgpuBufferRelease);
+        r->tiles.indices = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        {
+            .size = r->tiles.num_width * r->tiles.num_height * sizeof(uint32_t),
+            .usage = WGPUBufferUsage_Storage
+        });
+
+        od_log(r, "%ux%u tiles", r->tiles.num_width, r->tiles.num_height);
+
+        // TODO : screenshot resources
+    }
+    
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
