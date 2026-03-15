@@ -61,15 +61,31 @@ char* read_shader(const char* filename, size_t* string_size, Arena* arena)
 bool export_shaders(Arena* arena)
 {
     fprintf(stdout, "=> exporting shaders ");
+
+    size_t common_length;
+    char* common_data = read_shader("src/shaders/common.wgsl", &common_length, arena);
+    if (common_data == NULL)
+    {
+        fprintf(stdout, "\ncommon.wgsl not found\n\n");
+        return false;
+    }
+
+    common_length--;
     
     size_t binning_shader_length;
     char* binning_shader_data = read_shader("src/shaders/binning.wgsl", &binning_shader_length, arena);
     if (binning_shader_data == NULL)
     {
-        fprintf(stdout, "\nshader not found\n\n");
+        fprintf(stdout, "\nbinning.wgsl not found\n\n");
         return false;
     }
-    string2h("lib/binning.h", "binning_shader", binning_shader_data, binning_shader_length);
+
+    size_t combined_length = common_length + binning_shader_length;
+    char* combined_shader = arena_alloc(arena, combined_length);
+    memcpy(combined_shader, common_data, common_length);
+    memcpy(combined_shader + common_length, binning_shader_data, binning_shader_length);
+
+    string2h("lib/binning.h", "binning_shader", combined_shader, combined_length);
     fprintf(stdout, ".");
 
     size_t rasterizer_shader_length;
@@ -79,7 +95,13 @@ bool export_shaders(Arena* arena)
         fprintf(stdout, "\nshader not found\n\n");
         return false;
     }
-    string2h("lib/rasterizer.h", "rasterizer_shader", rasterizer_shader_data, rasterizer_shader_length);
+
+    combined_length = common_length + rasterizer_shader_length;
+    combined_shader = arena_alloc(arena, combined_length);
+    memcpy(combined_shader, common_data, common_length);
+    memcpy(combined_shader + common_length, rasterizer_shader_data, rasterizer_shader_length);
+
+    string2h("lib/rasterizer.h", "rasterizer_shader", combined_shader, combined_length);
     fprintf(stdout, ".\n\n");
 
     return true;

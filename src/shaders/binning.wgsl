@@ -401,44 +401,6 @@ fn is_aabb_inside_pie(center: vec2<f32>, direction: vec2<f32>, aperture: vec2<f3
 // Tile binning
 // ---------------------------------------------------------------------------------------------------------------------------
 
-struct draw_command 
-{
-    data_index : u32,
-    flags      : u32 // extra (8) | clip_index (8) | fillmode (8) | type (8)
-};
 
-fn get_extra(cmd: draw_command) -> u32  {return cmd.flags & 0xFFu;}
-fn get_clip(cmd: draw_command) -> u32 {return (cmd.flags >> 8u) & 0xFFu;}
-fn get_fillmode(cmd: draw_command) -> u32 {return (cmd.flags >> 16u) & 0xFFu;}
-fn get_type(cmd: draw_command) -> u32 {return (cmd.flags >> 24u) & 0xFFu;}
 
-struct tile_node
-{
-    next          : u32,
-    command_index : u32 // command index + command type
-};
-
-fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}
-fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}
-
-struct counters
-{
-    num_nodes : atomic<u32>,
-    num_tiles : atomic<u32>
-};
-
-@group(0) @binding(0)
-var<storage, read> g_commands : array<draw_command>;
-
-@group(0) @binding(1)
-var<storage, read_write> g_tile_nodes : array<tile_node>;
-
-@group(0) @binding(2)
-var<storage, read_write> g_tile_indices : array<u32>;
-
-@group(0) @binding(3)
-var<storage, read_write> g_counters : counters;
-
-@group(0) @binding(4)
-var<storage, read> g_quantized_aabb : array<u32>;
 

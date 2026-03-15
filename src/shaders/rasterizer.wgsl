@@ -1,10 +1,4 @@
 // ---------------------------------------------------------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------------------------------------------------------
-
-const TILE_SIZE: f32 = 16.0;
-
-// ---------------------------------------------------------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------------------------------------------------------
 
@@ -119,18 +113,6 @@ struct vs_out
     @builtin(position) pos: vec4<f32>,
     @location(0) @interpolate(flat) tile_index: u32
 };
-
-struct draw_args 
-{
-    num_tile_width: u32,
-    screen_div: vec2<f32>
-};
-
-@group(1) @binding(0)
-var<uniform> input: g_draw_args;
-
-@group(0) @binding(2)
-var<storage, read> g_tile_indices : array<u32>;
 
 @vertex
 fn tile_vs(@builtin(instance_index) instance_id: u32, @builtin(vertex_index) vertex_id: u32) -> vs_out

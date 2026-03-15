@@ -83,6 +83,7 @@ typedef struct onedraw_def
 {
     void* preallocated_buffer;
     WGPUDevice device;
+    WGPUTextureFormat surface_format;
     uint32_t viewport_width;
     uint32_t viewport_height;
     void (*log_func)(const char* string);
@@ -117,6 +118,7 @@ size_t od_min_memory_size(void);
 // Initializes the library
 //      [preallocated_buffer]   user-allocated memory of od_min_memory_size() bytes, must be aligned on sizeof(uintptr_t)
 //      [device]                pointer to webGPU device
+//      [surface_format]
 //      [viewport_width]
 //      [viewport_height]
 //      [log_func]              pointer to the log function, can be NULL if no log required
