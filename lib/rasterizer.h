@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 6649;
+static const size_t rasterizer_shader_size = 6708;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures and bindgroups\n"
@@ -88,7 +88,10 @@ static const char rasterizer_shader[] =
     "var<storage> g_draw_data: array<f32>;\n"
     "\n"
     "@group(1) @binding(4)\n"
-    "var<storage> g_clip: array<clip_rect>;\n"
+    "var<storage> g_clips: array<clip_rect>;\n"
+    "\n"
+    "@group(1) @binding(5)\n"
+    "var<storage> g_colors: array<u32>;\n"
     "\n"
     "\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"

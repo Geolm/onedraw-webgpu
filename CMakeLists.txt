@@ -101,6 +101,13 @@ add_executable(minimal
     ./tests/native_webgpu.c
 )
 
+add_custom_command(
+    TARGET minimal
+    PRE_BUILD
+    COMMAND ${CMAKE_SOURCE_DIR}/build/prebuild/builder
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 target_link_libraries(minimal glfw)
 
 if(TARGET build_lib)

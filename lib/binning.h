@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 14855;
+static const size_t binning_shader_size = 14914;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures and bindgroups\n"
@@ -88,7 +88,10 @@ static const char binning_shader[] =
     "var<storage> g_draw_data: array<f32>;\n"
     "\n"
     "@group(1) @binding(4)\n"
-    "var<storage> g_clip: array<clip_rect>;\n"
+    "var<storage> g_clips: array<clip_rect>;\n"
+    "\n"
+    "@group(1) @binding(5)\n"
+    "var<storage> g_colors: array<u32>;\n"
     "\n"
     "\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
