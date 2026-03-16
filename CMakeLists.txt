@@ -94,6 +94,16 @@ macro(setup_app app)
     endif()
 endmacro()
 
+# --- Run prebuild ---
+if(TARGET build_lib)
+    add_custom_target(run_builder ALL
+        COMMAND $<TARGET_FILE:builder>
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+
+    add_dependencies(run_builder builder)
+endif()
+
 # --- Minimal app ---
 add_executable(minimal
     ./lib/onedraw.c
@@ -101,17 +111,10 @@ add_executable(minimal
     ./tests/native_webgpu.c
 )
 
-add_custom_command(
-    TARGET minimal
-    PRE_BUILD
-    COMMAND ${CMAKE_SOURCE_DIR}/build/prebuild/builder
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
 target_link_libraries(minimal glfw)
 
 if(TARGET build_lib)
-    add_dependencies(minimal build_lib)
+    add_dependencies(minimal run_builder)
 endif()
 
 setup_app(minimal)
