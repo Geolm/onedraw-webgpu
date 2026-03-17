@@ -1,4 +1,40 @@
 // ---------------------------------------------------------------------------------------------------------------------------
+// Bindgroups
+// ---------------------------------------------------------------------------------------------------------------------------
+
+// group 0 : static or updated on gpu
+@group(0) @binding(0)
+var<storage, read> g_tile_nodes : array<tile_node>;
+
+@group(0) @binding(1)
+var<storage, read> g_tile_indices : array<u32>;
+
+@group(0) @binding(2)
+var<storage, read_write> g_counters : counters;
+
+@group(0) @binding(3)
+var<storage, read> g_glyphs : array<glyph>;
+
+// group 1 : updated each frame
+@group(1) @binding(0)
+var<uniform> g_draw_args: draw_args;
+
+@group(1) @binding(1)
+var<storage, read> g_commands : array<draw_command>;
+
+@group(1) @binding(2)
+var<storage, read> g_quantized_aabb : array<u32>;
+
+@group(1) @binding(3)
+var<storage, read> g_draw_data: array<f32>;
+
+@group(1) @binding(4)
+var<storage, read> g_clips: array<clip_rect>;
+
+@group(1) @binding(5)
+var<storage, read> g_colors: array<u32>;
+
+// ---------------------------------------------------------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------------------------------------------------------
 

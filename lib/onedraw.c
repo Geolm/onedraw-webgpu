@@ -109,7 +109,7 @@ struct onedraw
         WGPUBuffer head; 
         WGPUComputePipeline binning_pso;
         WGPUComputePipeline write_indirect_buffer_pso;
-        WGPUBuffer counters_buffer;
+        WGPUBuffer counters;
         WGPUBuffer indirect_arg;
         WGPUBuffer indices;
         WGPUBuffer nodes;
@@ -169,6 +169,8 @@ struct onedraw
     {
         WGPUBindGroup static_group;
         WGPUBindGroup dynamic_group[FRAME_COUNT];
+        WGPUBindGroupLayout rasterizer_layout;
+        WGPUBindGroupLayout frame_layout;
     } binding;
 
     void (*custom_log)(const char* string);
@@ -329,6 +331,182 @@ size_t od_min_memory_size(void)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+void build_binding(struct onedraw* r)
+{
+    WGPUBindGroupLayoutEntry rasterizer_layout_entries[] = 
+    {
+        {   // tile_node
+            .binding = 0,
+            .visibility = WGPUShaderStage_Fragment,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // tile_indices
+            .binding = 1,
+            .visibility = WGPUShaderStage_Vertex,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // counters
+            .binding = 2,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // glyphs
+            .binding = 3,
+            .visibility = WGPUShaderStage_Fragment,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+    };
+
+    r->binding.rasterizer_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
+    {
+        .nextInChain = NULL,
+        .label = 
+        {
+            .data = "rasterizer_layout",
+            .length = 17
+        },
+        .entries = rasterizer_layout_entries,
+        .entryCount = 4
+    });
+
+    WGPUBindGroupLayoutEntry frame_layout_entries[] =
+    {
+        { // g_draw_args (uniform)
+            .binding = 0,
+            .visibility = WGPUShaderStage_Compute | WGPUShaderStage_Vertex | WGPUShaderStage_Fragment,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_Uniform,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {
+            // g_commands
+            .binding = 1,
+            .visibility = WGPUShaderStage_Compute | WGPUShaderStage_Fragment,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        { // g_quantized_aabb
+            .binding = 2,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        { // g_draw_data
+            .binding = 3,
+            .visibility = WGPUShaderStage_Compute | WGPUShaderStage_Fragment,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        { // g_clips
+            .binding = 4,
+            .visibility = WGPUShaderStage_Compute | WGPUShaderStage_Fragment,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        { // g_colors
+            .binding = 5,
+            .visibility = WGPUShaderStage_Fragment,
+            .buffer = 
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+    };
+
+    r->binding.frame_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
+    {
+        .nextInChain = NULL,
+        .label = 
+        {
+            .data = "frame_layout",
+            .length = 12
+        },
+        .entries = frame_layout_entries,
+        .entryCount = 6
+    });
+
+//     WGPUBindGroupEntry entries[4] = 
+//     {
+//         {
+//             .binding = 0,
+//             .buffer = r->tiles.nodes,
+//             .offset = 0,
+//             .size = WGPU_WHOLE_SIZE,
+//         },
+//         {
+//             .binding = 1,
+//             .buffer = r->tiles.indices,
+//             .offset = 0,
+//             .size = WGPU_WHOLE_SIZE,
+//         },
+//         {
+//             .binding = 2,
+//             .buffer = r->tiles.counters,
+//             .offset = 0,
+//             .size = WGPU_WHOLE_SIZE,
+//         },
+//         {
+//             .binding = 3,
+//             .buffer = r->font.glyphs,
+//             .offset = 0,
+//             .size = WGPU_WHOLE_SIZE,
+//         },
+//     };
+
+//     WGPUBindGroupDescriptor bind_group_desc = 
+//     {
+//     .nextInChain = NULL,
+//     .label = "group0_static_gpu",
+//     .layout = bind_group_layout0,
+//     .entryCount = 4,
+//     .entries = entries,
+// };
+
+    //wgpuDeviceCreateBindGroup()
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
 void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
 {
     WGPUShaderSourceWGSL wgsl = 
@@ -352,8 +530,8 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     WGPUPipelineLayout layout =
         wgpuDeviceCreatePipelineLayout(r->device, &(WGPUPipelineLayoutDescriptor)
         {
-            .bindGroupLayoutCount = 0,
-            .bindGroupLayouts = NULL,
+            .bindGroupLayoutCount = 2,
+            .bindGroupLayouts = (WGPUBindGroupLayout[]) {r->binding.rasterizer_layout, r->binding.frame_layout}
         });
 
     WGPUColorTargetState color_target = 
@@ -365,7 +543,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     WGPUFragmentState fragment = 
     {
         .module = shader,
-        .entryPoint = (WGPUStringView){ "tile_ps", 7 },
+        .entryPoint = (WGPUStringView){ "tile_fs", 7 },
         .targetCount = 1,
         .targets = &color_target
     };
@@ -389,7 +567,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         },
 
         .fragment = &fragment,
-        .multisample = {.count = 1, .mask = ~0u,}
+        .multisample = {.count = 1, .mask = ~0u}
     };
 
     r->rasterizer.pso = wgpuDeviceCreateRenderPipeline(r->device, &desc);
@@ -472,7 +650,8 @@ struct onedraw* od_init(onedraw_def* def)
     r->queue = wgpuDeviceGetQueue(r->device);
 
     assert_msg(r->queue != NULL, "cannot create queue from device");
-    
+
+    build_binding(r);
     build_pso(r, def->surface_format);
     build_font(r);
     // od_build_depthstencil_state(r);
@@ -611,6 +790,7 @@ void od_terminate(struct onedraw* r)
 {
     SAFE_RELEASE(r->font.view, wgpuTextureViewRelease);
     SAFE_RELEASE(r->font.texture, wgpuTextureRelease);
+    SAFE_RELEASE(r->binding.rasterizer_layout, wgpuBindGroupLayoutRelease);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
