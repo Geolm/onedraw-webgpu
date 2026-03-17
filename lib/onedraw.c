@@ -170,6 +170,7 @@ struct onedraw
         WGPUBindGroup static_group;
         WGPUBindGroup dynamic_group[FRAME_COUNT];
         WGPUBindGroupLayout rasterizer_layout;
+        WGPUBindGroupLayout binning_layout;
         WGPUBindGroupLayout frame_layout;
     } binding;
 
@@ -464,6 +465,62 @@ void build_binding(struct onedraw* r)
         },
         .entries = frame_layout_entries,
         .entryCount = 6
+    });
+
+    WGPUBindGroupLayoutEntry binning_layout_entries[] = 
+    {
+        {   // tile_node
+            .binding = 0,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // tile_indices
+            .binding = 1,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // counters
+            .binding = 2,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // glyphs
+            .binding = 3,
+            .visibility = WGPUShaderStage_Fragment,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+    };
+
+    r->binding.binning_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
+    {
+        .nextInChain = NULL,
+        .label = 
+        {
+            .data = "binning_layout",
+            .length = 14
+        },
+        .entries = binning_layout_entries,
+        .entryCount = 4
     });
 
 //     WGPUBindGroupEntry entries[4] = 
@@ -791,6 +848,7 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->font.view, wgpuTextureViewRelease);
     SAFE_RELEASE(r->font.texture, wgpuTextureRelease);
     SAFE_RELEASE(r->binding.rasterizer_layout, wgpuBindGroupLayoutRelease);
+    SAFE_RELEASE(r->binding.binning_layout, wgpuBindGroupLayoutRelease);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------

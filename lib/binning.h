@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 15365;
+static const size_t binning_shader_size = 15193;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -116,21 +116,6 @@ static const char binning_shader[] =
     "\n"
     "@group(1) @binding(5)\n"
     "var<storage, read> g_colors: array<u32>;\n"
-    "\n"
-    "\n"
-    "struct aabb\n"
-    "{\n"
-    "    min : vec2<f32>,\n"
-    "    max : vec2<f32>\n"
-    "};\n"
-    "\n"
-    "struct obb\n"
-    "{\n"
-    "    axis_i : vec2<f32>,\n"
-    "    axis_j : vec2<f32>,\n"
-    "    center : vec2<f32>,\n"
-    "    extents : vec2<f32>\n"
-    "}\n"
     "\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Helpers\n"
