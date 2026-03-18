@@ -10,9 +10,6 @@ var<storage, read> g_tile_nodes : array<tile_node>;
 var<storage, read> g_tile_indices : array<u32>;
 
 @group(0) @binding(2)
-var<storage, read_write> g_counters : counters;
-
-@group(0) @binding(3)
 var<storage, read> g_glyphs : array<glyph>;
 
 // group 1 : updated each frame

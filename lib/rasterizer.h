@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 7142;
+static const size_t rasterizer_shader_size = 7071;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -93,9 +93,6 @@ static const char rasterizer_shader[] =
     "var<storage, read> g_tile_indices : array<u32>;\n"
     "\n"
     "@group(0) @binding(2)\n"
-    "var<storage, read_write> g_counters : counters;\n"
-    "\n"
-    "@group(0) @binding(3)\n"
     "var<storage, read> g_glyphs : array<glyph>;\n"
     "\n"
     "// group 1 : updated each frame\n"

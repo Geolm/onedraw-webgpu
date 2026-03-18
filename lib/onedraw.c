@@ -50,6 +50,7 @@
 #define COLINEAR_THRESHOLD (.1f)
 #define FRAME_COUNT (3)
 #define TILE_SIZE (16)
+#define MAX_NODES_COUNT (1<<22)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -167,7 +168,8 @@ struct onedraw
 
     struct
     {
-        WGPUBindGroup static_group;
+        WGPUBindGroup rasterizer_group;
+        WGPUBindGroup binning_group;
         WGPUBindGroup dynamic_group[FRAME_COUNT];
         WGPUBindGroupLayout rasterizer_layout;
         WGPUBindGroupLayout binning_layout;
@@ -182,6 +184,14 @@ typedef struct vec2 {float x, y;} vec2;
 typedef struct aabb {vec2 min, max;} aabb;
 typedef struct quadratic_bezier {vec2 c0, c1, c2;} quadratic_bezier;
 typedef struct cubic_bezier {vec2 c0, c1, c2, c3;} cubic_bezier;
+
+typedef struct gpu_char
+{
+    vec2 uv_topleft;
+    vec2 uv_bottomright;
+    float width;
+    float height;
+} gpu_char;
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // private functions
@@ -356,18 +366,8 @@ void build_binding(struct onedraw* r)
                 .minBindingSize = 0,
             }
         },
-        {   // counters
-            .binding = 2,
-            .visibility = WGPUShaderStage_Compute,
-            .buffer =
-            {
-                .type = WGPUBufferBindingType_Storage,
-                .hasDynamicOffset = false,
-                .minBindingSize = 0,
-            }
-        },
         {   // glyphs
-            .binding = 3,
+            .binding = 2,
             .visibility = WGPUShaderStage_Fragment,
             .buffer =
             {
@@ -387,7 +387,7 @@ void build_binding(struct onedraw* r)
             .length = 17
         },
         .entries = rasterizer_layout_entries,
-        .entryCount = 4
+        .entryCount = 3
     });
 
     WGPUBindGroupLayoutEntry frame_layout_entries[] =
@@ -523,44 +523,40 @@ void build_binding(struct onedraw* r)
         .entryCount = 4
     });
 
-//     WGPUBindGroupEntry entries[4] = 
-//     {
-//         {
-//             .binding = 0,
-//             .buffer = r->tiles.nodes,
-//             .offset = 0,
-//             .size = WGPU_WHOLE_SIZE,
-//         },
-//         {
-//             .binding = 1,
-//             .buffer = r->tiles.indices,
-//             .offset = 0,
-//             .size = WGPU_WHOLE_SIZE,
-//         },
-//         {
-//             .binding = 2,
-//             .buffer = r->tiles.counters,
-//             .offset = 0,
-//             .size = WGPU_WHOLE_SIZE,
-//         },
-//         {
-//             .binding = 3,
-//             .buffer = r->font.glyphs,
-//             .offset = 0,
-//             .size = WGPU_WHOLE_SIZE,
-//         },
-//     };
+    WGPUBindGroupEntry entries[3] = 
+    {
+        {
+            .binding = 0,
+            .buffer = r->tiles.nodes,
+            .offset = 0,
+            .size = WGPU_WHOLE_SIZE,
+        },
+        {
+            .binding = 1,
+            .buffer = r->tiles.indices,
+            .offset = 0,
+            .size = WGPU_WHOLE_SIZE,
+        },
+        {
+            .binding = 2,
+            .buffer = r->font.glyphs,
+            .offset = 0,
+            .size = WGPU_WHOLE_SIZE,
+        },
+    };
 
-//     WGPUBindGroupDescriptor bind_group_desc = 
-//     {
-//     .nextInChain = NULL,
-//     .label = "group0_static_gpu",
-//     .layout = bind_group_layout0,
-//     .entryCount = 4,
-//     .entries = entries,
-// };
+    assert(r->tiles.nodes != NULL);
+    assert(r->tiles.indices != NULL);
+    assert(r->font.glyphs != NULL);
 
-    //wgpuDeviceCreateBindGroup()
+    r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
+    {
+        .nextInChain = NULL,
+        .label = {.data = "rasterizer_group", .length = 16},
+        .layout = r->binding.rasterizer_layout,
+        .entryCount = 3,
+        .entries = entries,
+    });
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -680,6 +676,45 @@ void build_font(struct onedraw* r)
     };
 
     wgpuQueueWriteTexture(r->queue, &copy_info, default_font_atlas, default_font_atlas_size, &layout, &extent);
+
+    // fill the glyph description to be upload on the gpu
+    gpu_char cpu_buffer[MAX_GLYPHS];
+    float oo_texture_width = 1.f / (float)r->font.desc.texture_width;
+    float oo_texture_height = 1.f / (float)r->font.desc.texture_height;
+    for(uint32_t i=0; i<r->font.desc.num_glyphs; i++)
+    {
+        const od_glyph* glyph = &r->font.desc.glyphs[i];
+        cpu_buffer[i] = (gpu_char)
+        {
+            .width = (float)glyph->x1 - (float)glyph->x0,
+            .height = (float)glyph->y1 - (float)glyph->y0,
+            .uv_topleft = 
+            {
+                .x = ((float)glyph->x0) * oo_texture_width, 
+                .y = ((float)glyph->y0) * oo_texture_height
+            },
+            .uv_bottomright = 
+            {
+                .x = ((float)glyph->x1) * oo_texture_width,
+                .y = ((float)glyph->y1) * oo_texture_height
+            }
+        };
+    }
+
+    size_t gpu_font_size = sizeof(cpu_buffer);
+    r->font.glyphs = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+    {
+        .size = gpu_font_size,
+        .mappedAtCreation = true,
+        .nextInChain = NULL,
+        .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+        .label = {.data = "gpu_font", .length = 8}
+    });
+
+    assert_msg(r->font.glyphs != NULL, "can create font description gpu buffer");
+    void* mapping = wgpuBufferGetMappedRange(r->font.glyphs, 0, gpu_font_size);
+    memcpy(mapping, cpu_buffer, gpu_font_size);
+    wgpuBufferUnmap(r->font.glyphs);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -705,14 +740,35 @@ struct onedraw* od_init(onedraw_def* def)
     r->rasterizer.clear_backbuffer = true;
     r->rasterizer.clear_color = (float4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
     r->queue = wgpuDeviceGetQueue(r->device);
-
     assert_msg(r->queue != NULL, "cannot create queue from device");
 
+    // resource creation
+    r->tiles.counters = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+    {
+        .label = {.data = "tile_counters", .length = 13},
+        .mappedAtCreation = false,
+        .nextInChain = NULL,
+        .size = sizeof(uint32_t) * 2,
+        .usage = WGPUBufferUsage_Storage
+    });
+    assert_msg(r->tiles.counters != NULL, "failed to create tile counters buffer");
+    
+    r->tiles.nodes = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+    {
+        .label = {.data = "tile_nodes", .length = 10},
+        .mappedAtCreation = false,
+        .nextInChain = NULL,
+        .size = sizeof(uint64_t) * MAX_NODES_COUNT,
+        .usage = WGPUBufferUsage_Storage
+    });
+    assert_msg(r->tiles.nodes != NULL, "failed to create tile nodes buffer");
+
+    od_resize(r, def->viewport_width, def->viewport_height);
+    build_font(r);
     build_binding(r);
     build_pso(r, def->surface_format);
-    build_font(r);
     // od_build_depthstencil_state(r);
-    od_resize(r, def->viewport_width, def->viewport_height);
+    
 
     // if (def->atlas.width != 0)
     //     od_create_atlas(r, def->atlas.width, def->atlas.height, def->atlas.num_slices);
@@ -849,6 +905,8 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->font.texture, wgpuTextureRelease);
     SAFE_RELEASE(r->binding.rasterizer_layout, wgpuBindGroupLayoutRelease);
     SAFE_RELEASE(r->binding.binning_layout, wgpuBindGroupLayoutRelease);
+    SAFE_RELEASE(r->tiles.counters, wgpuBufferRelease);
+    SAFE_RELEASE(r->tiles.nodes, wgpuBufferRelease);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
