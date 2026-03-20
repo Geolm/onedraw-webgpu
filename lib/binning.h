@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 23626;
+static const size_t binning_shader_size = 23632;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -96,6 +96,7 @@ static const char binning_shader[] =
     "const PRIMITIVE_TRIANGLE: u32 = 5u;\n"
     "const BEGIN_GROUP: u32 = 16;\n"
     "const END_GROUP: u32 = 17;\n"
+    "const INVALID_INDEX:u32 = 0xFFFFFFFFu;\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Bindgroups\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
@@ -645,8 +646,7 @@ static const char binning_shader[] =
     "\n"
     "    let tile_index = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;\n"
     "    \n"
-    "    // Initialize head for this tile\n"
-    "    var current_head = 0xFFFFFFFFu; \n"
+    "    var current_head = INVALID_INDEX; \n"
     "\n"
     "    let tile_min = vec2<f32>(tile_xy) * TILE_SIZE;\n"
     "    let tile_max = (vec2<f32>(tile_xy) + 1.0) * TILE_SIZE;\n"
@@ -714,7 +714,7 @@ static const char binning_shader[] =
     "    g_tile_heads[tile_index] = current_head;\n"
     "\n"
     "    // If tile is not empty, register it for processing\n"
-    "    if (current_head != 0xFFFFFFFFu)\n"
+    "    if (current_head != INVALID_INDEX)\n"
     "    {\n"
     "        let pos = atomicAdd(&g_counters.num_tiles, 1u);\n"
     "        g_tile_indices[pos] = tile_index;\n"

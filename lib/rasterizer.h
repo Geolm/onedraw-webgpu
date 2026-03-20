@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 7531;
+static const size_t rasterizer_shader_size = 7570;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -96,6 +96,7 @@ static const char rasterizer_shader[] =
     "const PRIMITIVE_TRIANGLE: u32 = 5u;\n"
     "const BEGIN_GROUP: u32 = 16;\n"
     "const END_GROUP: u32 = 17;\n"
+    "const INVALID_INDEX:u32 = 0xFFFFFFFFu;\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Bindgroups\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"

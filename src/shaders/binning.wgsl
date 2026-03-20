@@ -547,8 +547,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
 
     let tile_index = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;
     
-    // Initialize head for this tile
-    var current_head = 0xFFFFFFFFu; 
+    var current_head = INVALID_INDEX; 
 
     let tile_min = vec2<f32>(tile_xy) * TILE_SIZE;
     let tile_max = (vec2<f32>(tile_xy) + 1.0) * TILE_SIZE;
@@ -616,7 +615,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
     g_tile_heads[tile_index] = current_head;
 
     // If tile is not empty, register it for processing
-    if (current_head != 0xFFFFFFFFu)
+    if (current_head != INVALID_INDEX)
     {
         let pos = atomicAdd(&g_counters.num_tiles, 1u);
         g_tile_indices[pos] = tile_index;

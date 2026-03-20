@@ -865,7 +865,7 @@ struct onedraw* od_init(onedraw_def* def)
         .size = sizeof(indirect_params),
         .usage = WGPUBufferUsage_Storage
     });
-    assert_msg(r->tiles.indirect_draw_params != NULL, "failed to create tile nodes buffer");
+    assert_msg(r->tiles.indirect_draw_params != NULL, "failed to indirect draw params buffer");
 
     od_resize(r, def->viewport_width, def->viewport_height);
     build_font(r);

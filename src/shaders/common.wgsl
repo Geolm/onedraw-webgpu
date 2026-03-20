@@ -89,4 +89,5 @@ const PRIMITIVE_DISC: u32 = 4u;
 const PRIMITIVE_TRIANGLE: u32 = 5u;
 const BEGIN_GROUP: u32 = 16;
 const END_GROUP: u32 = 17;
+const INVALID_INDEX:u32 = 0xFFFFFFFFu;
 
