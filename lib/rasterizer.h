@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 7071;
+static const size_t rasterizer_shader_size = 7531;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -75,12 +75,27 @@ static const char rasterizer_shader[] =
     "    extents : vec2<f32>\n"
     "}\n"
     "\n"
+    "struct indirect_params \n"
+    "{\n"
+    "    vertex_count: u32,\n"
+    "    instance_count: u32,\n"
+    "    first_vertex: u32,\n"
+    "    first_instance: u32\n"
+    "};\n"
+    "\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Constants\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "\n"
     "const TILE_SIZE: f32 = 16.0;\n"
-    "\n"
+    "const PRIMITIVE_ORIENTED_BOX: u32 = 0u;\n"
+    "const PRIMITIVE_ELLIPSE: u32 = 1u;\n"
+    "const PRIMITIVE_ARC: u32 = 2u;\n"
+    "const PRIMITIVE_PIE: u32 = 3u;\n"
+    "const PRIMITIVE_DISC: u32 = 4u;\n"
+    "const PRIMITIVE_TRIANGLE: u32 = 5u;\n"
+    "const BEGIN_GROUP: u32 = 16;\n"
+    "const END_GROUP: u32 = 17;\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Bindgroups\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
@@ -94,6 +109,9 @@ static const char rasterizer_shader[] =
     "\n"
     "@group(0) @binding(2)\n"
     "var<storage, read> g_glyphs : array<glyph>;\n"
+    "\n"
+    "@group(0) @binding(3)\n"
+    "var<storage, read_write> g_tile_heads : array<u32>;\n"
     "\n"
     "// group 1 : updated each frame\n"
     "@group(1) @binding(0)\n"

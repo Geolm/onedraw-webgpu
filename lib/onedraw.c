@@ -50,7 +50,7 @@
 #define COLINEAR_THRESHOLD (.1f)
 #define FRAME_COUNT (3)
 #define TILE_SIZE (16)
-#define MAX_NODES_COUNT (1<<22)
+#define MAX_NODES_COUNT (1U<<22)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -107,7 +107,7 @@ struct onedraw
     // tile binning
     struct 
     {
-        WGPUBuffer head; 
+        WGPUBuffer heads; 
         WGPUComputePipeline binning_pso;
         WGPUComputePipeline write_indirect_buffer_pso;
         WGPUBuffer counters;
@@ -192,6 +192,14 @@ typedef struct gpu_char
     float width;
     float height;
 } gpu_char;
+
+typedef struct indirect_params
+{
+    uint32_t vertex_count;
+    uint32_t instance_count;
+    uint32_t first_vertex;
+    uint32_t first_instance;
+} indirect_params;
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // private functions
@@ -509,6 +517,26 @@ void build_binding(struct onedraw* r)
                 .minBindingSize = 0,
             }
         },
+        {   // heads
+            .binding = 4,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
+        {   // indirect_draw_params
+            .binding = 5,
+            .visibility = WGPUShaderStage_Compute,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_Storage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        }
     };
 
     r->binding.binning_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
@@ -520,10 +548,10 @@ void build_binding(struct onedraw* r)
             .length = 14
         },
         .entries = binning_layout_entries,
-        .entryCount = 4
+        .entryCount = 6
     });
 
-    WGPUBindGroupEntry entries[3] = 
+    WGPUBindGroupEntry entries[] = 
     {
         {
             .binding = 0,
@@ -543,11 +571,18 @@ void build_binding(struct onedraw* r)
             .offset = 0,
             .size = WGPU_WHOLE_SIZE,
         },
+        {
+            .binding = 3,
+            .buffer = r->tiles.heads,
+            .offset = 0,
+            .size = WGPU_WHOLE_SIZE,
+        },
     };
 
     assert(r->tiles.nodes != NULL);
     assert(r->tiles.indices != NULL);
     assert(r->font.glyphs != NULL);
+    assert(r->tiles.heads != NULL);
 
     r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
@@ -562,7 +597,8 @@ void build_binding(struct onedraw* r)
 //-----------------------------------------------------------------------------------------------------------------------------
 void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
 {
-    WGPUShaderSourceWGSL wgsl = 
+    // rasterizer pso
+    WGPUShaderSourceWGSL rasterizer_wgsl = 
     {
         .chain = {.next = NULL, .sType = WGPUSType_ShaderSourceWGSL},
         .code = {.data = rasterizer_shader, .length = rasterizer_shader_size}
@@ -571,7 +607,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
 
     WGPUShaderModule shader = wgpuDeviceCreateShaderModule(r->device, &(WGPUShaderModuleDescriptor)
     {
-        .nextInChain = &wgsl.chain,
+        .nextInChain = &rasterizer_wgsl.chain,
         .label = 
         {
             .data = "rasterizer",
@@ -579,13 +615,11 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         }
     });
 
-
-    WGPUPipelineLayout layout =
-        wgpuDeviceCreatePipelineLayout(r->device, &(WGPUPipelineLayoutDescriptor)
-        {
-            .bindGroupLayoutCount = 2,
-            .bindGroupLayouts = (WGPUBindGroupLayout[]) {r->binding.rasterizer_layout, r->binding.frame_layout}
-        });
+    WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(r->device, &(WGPUPipelineLayoutDescriptor)
+    {
+        .bindGroupLayoutCount = 2,
+        .bindGroupLayouts = (WGPUBindGroupLayout[]) {r->binding.rasterizer_layout, r->binding.frame_layout}
+    });
 
     WGPUColorTargetState color_target = 
     {
@@ -601,7 +635,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .targets = &color_target
     };
 
-    WGPURenderPipelineDescriptor desc = 
+    WGPURenderPipelineDescriptor render_pipeline_desc = 
     {
         .layout = layout,
         .vertex = 
@@ -623,7 +657,67 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .multisample = {.count = 1, .mask = ~0u}
     };
 
-    r->rasterizer.pso = wgpuDeviceCreateRenderPipeline(r->device, &desc);
+    r->rasterizer.pso = wgpuDeviceCreateRenderPipeline(r->device, &render_pipeline_desc);
+    assert_msg(r->rasterizer.pso != NULL, "can't create rasterizer pso");
+
+    wgpuShaderModuleRelease(shader);
+    wgpuPipelineLayoutRelease(layout);
+
+    // binning pso
+    WGPUShaderSourceWGSL binning_wgsl = 
+    {
+        .chain = {.next = NULL, .sType = WGPUSType_ShaderSourceWGSL},
+        .code = {.data = binning_shader, .length = binning_shader_size}
+    };
+
+    layout = wgpuDeviceCreatePipelineLayout(r->device, &(WGPUPipelineLayoutDescriptor)
+    {
+        .bindGroupLayoutCount = 2,
+        .bindGroupLayouts = (WGPUBindGroupLayout[]) {r->binding.binning_layout, r->binding.frame_layout}
+    });
+
+    shader = wgpuDeviceCreateShaderModule(r->device, &(WGPUShaderModuleDescriptor)
+    {
+        .nextInChain = &binning_wgsl.chain,
+        .label = 
+        {
+            .data = "binning",
+            .length = 7
+        }
+    });
+
+    WGPUComputePipelineDescriptor compute_pipeline_desc = 
+    {
+        .layout = layout,
+        .compute = 
+        {
+            .module = shader,
+            .entryPoint = {.data = "tile_bin", .length = 8},
+            .nextInChain = NULL,
+            .constants = NULL
+        }
+    };
+
+    r->tiles.binning_pso = wgpuDeviceCreateComputePipeline(r->device, &compute_pipeline_desc);
+    assert_msg(r->tiles.binning_pso != NULL, "can't create binning pso");
+
+    compute_pipeline_desc = (WGPUComputePipelineDescriptor)
+    {
+        .layout = layout,
+        .compute = 
+        {
+            .module = shader,
+            .entryPoint = {.data = "write_indirect_args", .length = 19},
+            .nextInChain = NULL,
+            .constants = NULL
+        }
+    };
+
+    r->tiles.write_indirect_buffer_pso = wgpuDeviceCreateComputePipeline(r->device, &compute_pipeline_desc);
+    assert_msg(r->tiles.binning_pso != NULL, "can't create write indirect buffer pso");
+
+    wgpuShaderModuleRelease(shader);
+    wgpuPipelineLayoutRelease(layout);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -763,6 +857,16 @@ struct onedraw* od_init(onedraw_def* def)
     });
     assert_msg(r->tiles.nodes != NULL, "failed to create tile nodes buffer");
 
+    r->tiles.indirect_draw_params = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+    {
+        .label = {.data = "indirect_draw_params", .length = 20},
+        .mappedAtCreation = false,
+        .nextInChain = NULL,
+        .size = sizeof(indirect_params),
+        .usage = WGPUBufferUsage_Storage
+    });
+    assert_msg(r->tiles.indirect_draw_params != NULL, "failed to create tile nodes buffer");
+
     od_resize(r, def->viewport_width, def->viewport_height);
     build_font(r);
     build_binding(r);
@@ -828,8 +932,8 @@ void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 
         // TODO : add region support
 
-        SAFE_RELEASE(r->tiles.head, wgpuBufferRelease);
-        r->tiles.head = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        SAFE_RELEASE(r->tiles.heads, wgpuBufferRelease);
+        r->tiles.heads = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
         {
             .size = r->tiles.count * sizeof(uint32_t),
             .usage = WGPUBufferUsage_Storage
@@ -907,6 +1011,8 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->binding.binning_layout, wgpuBindGroupLayoutRelease);
     SAFE_RELEASE(r->tiles.counters, wgpuBufferRelease);
     SAFE_RELEASE(r->tiles.nodes, wgpuBufferRelease);
+    SAFE_RELEASE(r->tiles.heads, wgpuBufferRelease);
+    SAFE_RELEASE(r->rasterizer.pso, wgpuRenderPipelineRelease);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------

@@ -15,6 +15,12 @@ var<storage, read_write> g_counters : counters;
 @group(0) @binding(3)
 var<storage, read_write> g_glyphs : array<glyph>;
 
+@group(0) @binding(4)
+var<storage, read_write> g_tile_heads : array<u32>;
+
+@group(0) @binding(5)
+var<storage, read_write> g_indirect_draw : indirect_params;
+
 // group 1 : updated each frame
 @group(1) @binding(0)
 var<uniform> g_draw_args: draw_args;
@@ -418,9 +424,210 @@ fn is_aabb_inside_pie(center: vec2<f32>, direction: vec2<f32>, aperture: vec2<f3
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-// Tile binning
+// Tile Binning Helpers
 // ---------------------------------------------------------------------------------------------------------------------------
 
+fn clip_tile(tile: aabb, clip: clip_rect) -> bool
+{
+    return (tile.max.x < clip.min_x || tile.max.y < clip.min_y || 
+            tile.min.x > clip.max_x || tile.min.y > clip.max_y);
+}
 
+fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f32) -> bool
+{
+    let tile_enlarge_aabb = aabb_grow(tile_aabb, vec2<f32>(aabb_margin));
+    let is_hollow = (get_fillmode(cmd) != 0u); 
+    let cmd_type = get_type(cmd);
+    let data_idx = cmd.data_index;
+    var intersection = false;
 
+    switch (cmd_type)
+    {
+        case PRIMITIVE_ORIENTED_BOX:
+        {
+            let p0 = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let p1 = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);
+            let width = g_draw_data[data_idx + 4u];
+            let tile_rounded = aabb_grow(tile_enlarge_aabb, vec2<f32>(g_draw_data[data_idx + 5u]));
+            intersection = intersection_aabb_obb(tile_rounded, p0, p1, width);
 
+            if (intersection && is_hollow && is_aabb_inside_obb(p0, p1, width, tile_rounded))
+            {
+                intersection = false;
+            }
+        }
+        case PRIMITIVE_ELLIPSE:
+        {
+            let p0 = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let p1 = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);
+            let width = g_draw_data[data_idx + 4u];
+            let tile_center = (tile_aabb.min + tile_aabb.max) * 0.5;
+            let margin = select(0.0, g_draw_data[data_idx + 5u], is_hollow);
+            let tile_smooth = aabb_grow(tile_enlarge_aabb, vec2<f32>(margin));
+            intersection = intersection_ellipse_circle(p0, p1, width, tile_center, length(aabb_get_extents(tile_smooth) * 0.5));
+
+            if (intersection && is_hollow && is_aabb_inside_ellipse(p0, p1, width, tile_smooth))
+            {
+                intersection = false;
+            }
+        }
+        case PRIMITIVE_ARC:
+        {
+            let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let radius = g_draw_data[data_idx + 2u];
+            let direction = vec2<f32>(g_draw_data[data_idx + 3u], g_draw_data[data_idx + 4u]);
+            let aperture = vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);
+            let thickness = g_draw_data[data_idx + 7u];
+            intersection = intersection_aabb_arc(tile_enlarge_aabb, center, direction, aperture, radius, thickness);
+        }
+        case PRIMITIVE_PIE:
+        {
+            let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let radius = g_draw_data[data_idx + 2u];
+            let direction = vec2<f32>(g_draw_data[data_idx + 3u], g_draw_data[data_idx + 4u]);
+            let aperture = vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);
+            let margin = select(0.0, g_draw_data[data_idx + 7u], is_hollow);
+            let tile_smooth = aabb_grow(tile_enlarge_aabb, vec2<f32>(margin));
+            intersection = intersection_aabb_pie(tile_smooth, center, direction, aperture, radius);
+
+            if (intersection && is_hollow && is_aabb_inside_pie(center, direction, aperture, radius, tile_smooth))
+            {
+                intersection = false;
+            }
+        }
+        case PRIMITIVE_DISC:
+        {
+            let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            var radius = g_draw_data[data_idx + 2u];
+            if (is_hollow)
+            {
+                let half_width = g_draw_data[data_idx + 3u] + aabb_margin;
+                intersection = intersection_aabb_circle(tile_aabb, center, radius, half_width);
+            }
+            else
+            {
+                radius += aabb_margin;
+                intersection = intersection_aabb_disc(tile_aabb, center, radius);
+            }
+        }
+        case PRIMITIVE_TRIANGLE:
+        {
+            let p0 = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let p1 = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);
+            let p2 = vec2<f32>(g_draw_data[data_idx + 4u], g_draw_data[data_idx + 5u]);
+            let tile_rounded = aabb_grow(tile_enlarge_aabb, vec2<f32>(g_draw_data[data_idx + 6u]));
+            intersection = intersection_aabb_triangle(tile_rounded, p0, p1, p2);
+
+            if (intersection && is_hollow && is_aabb_inside_triangle(p0, p1, p2, tile_rounded))
+            {
+                intersection = false;
+            }
+        }
+        default:
+        {
+            intersection = true;
+        }
+    }
+    return intersection;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Compute Shaders
+// ---------------------------------------------------------------------------------------------------------------------------
+
+@compute @workgroup_size(16, 16, 1)
+fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
+{
+    let tile_xy = global_id.xy;
+
+    if (tile_xy.x >= g_draw_args.num_tile_width || tile_xy.y >= g_draw_args.num_tile_height)
+    {
+        return;
+    }
+
+    let tile_index = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;
+    
+    // Initialize head for this tile
+    var current_head = 0xFFFFFFFFu; 
+
+    let tile_min = vec2<f32>(tile_xy) * TILE_SIZE;
+    let tile_max = (vec2<f32>(tile_xy) + 1.0) * TILE_SIZE;
+    let tile_aabb = aabb(tile_min, tile_max);
+
+    var aabb_margin: f32 = 0.0;
+
+    // REVERSE TRAVERSAL: Start from the last command and go to the first.
+    // This ensures that command 0 becomes the final 'head' of the linked list.
+    for (var i: i32 = i32(g_draw_args.num_commands) - 1; i >= 0; i--)
+    {
+        let cmd_idx = u32(i);
+        let cmd = g_commands[cmd_idx];
+        let cmd_type = get_type(cmd);
+
+        // 1. Coarse AABB check (Quantized)
+        let q_aabb = g_quantized_aabb[cmd_idx];
+        let min_x = (q_aabb >> 0u) & 0xFFu;
+        let min_y = (q_aabb >> 8u) & 0xFFu;
+        let max_x = (q_aabb >> 16u) & 0xFFu;
+        let max_y = (q_aabb >> 24u) & 0xFFu;
+
+        if (tile_xy.x < min_x || tile_xy.y < min_y || tile_xy.x > max_x || tile_xy.y > max_y)
+        {
+            continue;
+        }
+
+        // 2. Clip Rect check
+        let clip_idx = get_clip(cmd);
+        let clip = g_clips[clip_idx];
+        if (clip_tile(tile_aabb, clip))
+        {
+            continue;
+        }
+
+        // 3. Fine-grained intersection test
+        let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);
+
+        // we traverse in reverse order, so the end comes first
+        if (cmd_type == BEGIN_GROUP) 
+        {
+            aabb_margin = 0.0;
+        }
+        else if (cmd_type == END_GROUP)
+        {
+            aabb_margin = g_draw_data[cmd.data_index];
+        }
+
+        if (to_be_added)
+        {
+            let node_idx = atomicAdd(&g_counters.num_nodes, 1u);
+
+            if (node_idx < g_draw_args.max_nodes)
+            {
+                let packed_info = (cmd_type << 16u) | (cmd_idx & 0xFFFFu);
+
+                g_tile_nodes[node_idx] = tile_node(current_head, packed_info);
+
+                current_head = node_idx;
+            }
+        }
+    }
+
+    // Write final head to global buffer
+    g_tile_heads[tile_index] = current_head;
+
+    // If tile is not empty, register it for processing
+    if (current_head != 0xFFFFFFFFu)
+    {
+        let pos = atomicAdd(&g_counters.num_tiles, 1u);
+        g_tile_indices[pos] = tile_index;
+    }
+}
+
+@compute @workgroup_size(1, 1, 1)
+fn write_indirect_args()
+{
+    g_indirect_draw.vertex_count   = 4u; // 4 vertices for a quad/strip
+    g_indirect_draw.instance_count = atomicLoad(&g_counters.num_tiles);
+    g_indirect_draw.first_vertex   = 0u;
+    g_indirect_draw.first_instance = 0u;
+}

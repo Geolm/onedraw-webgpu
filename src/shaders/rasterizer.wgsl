@@ -12,6 +12,9 @@ var<storage, read> g_tile_indices : array<u32>;
 @group(0) @binding(2)
 var<storage, read> g_glyphs : array<glyph>;
 
+@group(0) @binding(3)
+var<storage, read_write> g_tile_heads : array<u32>;
+
 // group 1 : updated each frame
 @group(1) @binding(0)
 var<uniform> g_draw_args: draw_args;

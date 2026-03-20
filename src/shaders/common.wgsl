@@ -68,10 +68,25 @@ struct obb
     extents : vec2<f32>
 }
 
+struct indirect_params 
+{
+    vertex_count: u32,
+    instance_count: u32,
+    first_vertex: u32,
+    first_instance: u32
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------------------------------------------------------
 
 const TILE_SIZE: f32 = 16.0;
-
+const PRIMITIVE_ORIENTED_BOX: u32 = 0u;
+const PRIMITIVE_ELLIPSE: u32 = 1u;
+const PRIMITIVE_ARC: u32 = 2u;
+const PRIMITIVE_PIE: u32 = 3u;
+const PRIMITIVE_DISC: u32 = 4u;
+const PRIMITIVE_TRIANGLE: u32 = 5u;
+const BEGIN_GROUP: u32 = 16;
+const END_GROUP: u32 = 17;
 
