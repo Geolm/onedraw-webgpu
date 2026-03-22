@@ -64,6 +64,7 @@
 #else
 #define OD_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
+#define WGPU_STRING_VIEW(s) (WGPUStringView){ .data = (s), .length = sizeof(s) - 1 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Private structures
@@ -384,18 +385,24 @@ void build_binding(struct onedraw* r)
                 .minBindingSize = 0,
             }
         },
+        {   // heads
+            .binding = 3,
+            .visibility = WGPUShaderStage_Fragment,
+            .buffer =
+            {
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
+                .hasDynamicOffset = false,
+                .minBindingSize = 0,
+            }
+        },
     };
 
     r->binding.rasterizer_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
         .nextInChain = NULL,
-        .label = 
-        {
-            .data = "rasterizer_layout",
-            .length = 17
-        },
+        .label = WGPU_STRING_VIEW("rasterizer_layout"),
         .entries = rasterizer_layout_entries,
-        .entryCount = 3
+        .entryCount = 4
     });
 
     WGPUBindGroupLayoutEntry frame_layout_entries[] =
@@ -466,11 +473,7 @@ void build_binding(struct onedraw* r)
     r->binding.frame_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
         .nextInChain = NULL,
-        .label = 
-        {
-            .data = "frame_layout",
-            .length = 12
-        },
+        .label = WGPU_STRING_VIEW("frame_layout"),
         .entries = frame_layout_entries,
         .entryCount = 6
     });
@@ -542,11 +545,7 @@ void build_binding(struct onedraw* r)
     r->binding.binning_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
         .nextInChain = NULL,
-        .label = 
-        {
-            .data = "binning_layout",
-            .length = 14
-        },
+        .label = WGPU_STRING_VIEW("binning_layout"),
         .entries = binning_layout_entries,
         .entryCount = 6
     });
@@ -587,9 +586,9 @@ void build_binding(struct onedraw* r)
     r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
         .nextInChain = NULL,
-        .label = {.data = "rasterizer_group", .length = 16},
+        .label = WGPU_STRING_VIEW("rasterizer_group"),
         .layout = r->binding.rasterizer_layout,
-        .entryCount = 3,
+        .entryCount = 4,
         .entries = entries,
     });
 }
@@ -608,11 +607,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     WGPUShaderModule shader = wgpuDeviceCreateShaderModule(r->device, &(WGPUShaderModuleDescriptor)
     {
         .nextInChain = &rasterizer_wgsl.chain,
-        .label = 
-        {
-            .data = "rasterizer",
-            .length = 11
-        }
+        .label = WGPU_STRING_VIEW("rasterizer")
     });
 
     WGPUPipelineLayout layout = wgpuDeviceCreatePipelineLayout(r->device, &(WGPUPipelineLayoutDescriptor)
@@ -630,7 +625,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     WGPUFragmentState fragment = 
     {
         .module = shader,
-        .entryPoint = (WGPUStringView){ "tile_fs", 7 },
+        .entryPoint = WGPU_STRING_VIEW("tile_fs"),
         .targetCount = 1,
         .targets = &color_target
     };
@@ -641,7 +636,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .vertex = 
         {
             .module = shader,
-            .entryPoint = (WGPUStringView){ "tile_vs", 7 },
+            .entryPoint = WGPU_STRING_VIEW("tile_vs"),
             .bufferCount = 0,
             .buffers = NULL
         },
@@ -679,11 +674,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     shader = wgpuDeviceCreateShaderModule(r->device, &(WGPUShaderModuleDescriptor)
     {
         .nextInChain = &binning_wgsl.chain,
-        .label = 
-        {
-            .data = "binning",
-            .length = 7
-        }
+        .label = WGPU_STRING_VIEW("binning")
     });
 
     WGPUComputePipelineDescriptor compute_pipeline_desc = 
@@ -692,7 +683,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .compute = 
         {
             .module = shader,
-            .entryPoint = {.data = "tile_bin", .length = 8},
+            .entryPoint = WGPU_STRING_VIEW("tile_bin"),
             .nextInChain = NULL,
             .constants = NULL
         }
@@ -707,7 +698,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .compute = 
         {
             .module = shader,
-            .entryPoint = {.data = "write_indirect_args", .length = 19},
+            .entryPoint = WGPU_STRING_VIEW("write_indirect_args"),
             .nextInChain = NULL,
             .constants = NULL
         }
@@ -802,7 +793,7 @@ void build_font(struct onedraw* r)
         .mappedAtCreation = true,
         .nextInChain = NULL,
         .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
-        .label = {.data = "gpu_font", .length = 8}
+        .label = WGPU_STRING_VIEW("gpu_font")
     });
 
     assert_msg(r->font.glyphs != NULL, "can create font description gpu buffer");
@@ -839,7 +830,7 @@ struct onedraw* od_init(onedraw_def* def)
     // resource creation
     r->tiles.counters = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
     {
-        .label = {.data = "tile_counters", .length = 13},
+        .label = WGPU_STRING_VIEW("tile_counters"),
         .mappedAtCreation = false,
         .nextInChain = NULL,
         .size = sizeof(uint32_t) * 2,
@@ -849,7 +840,7 @@ struct onedraw* od_init(onedraw_def* def)
     
     r->tiles.nodes = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
     {
-        .label = {.data = "tile_nodes", .length = 10},
+        .label = WGPU_STRING_VIEW("tile_nodes"),
         .mappedAtCreation = false,
         .nextInChain = NULL,
         .size = sizeof(uint64_t) * MAX_NODES_COUNT,
@@ -859,7 +850,7 @@ struct onedraw* od_init(onedraw_def* def)
 
     r->tiles.indirect_draw_params = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
     {
-        .label = {.data = "indirect_draw_params", .length = 20},
+        .label = WGPU_STRING_VIEW("indirect_draw_params"),
         .mappedAtCreation = false,
         .nextInChain = NULL,
         .size = sizeof(indirect_params),

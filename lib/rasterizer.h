@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 7570;
+static const size_t rasterizer_shader_size = 7737;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Common structures/functions\n"
@@ -42,7 +42,8 @@ static const char rasterizer_shader[] =
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
     "    screen_div: vec2<f32>,\n"
-    "    aa_width: f32\n"
+    "    aa_width: f32,\n"
+    "    clear_color: vec4<f32>\n"
     "};\n"
     "\n"
     "struct glyph\n"
@@ -112,7 +113,7 @@ static const char rasterizer_shader[] =
     "var<storage, read> g_glyphs : array<glyph>;\n"
     "\n"
     "@group(0) @binding(3)\n"
-    "var<storage, read_write> g_tile_heads : array<u32>;\n"
+    "var<storage, read> g_tile_heads : array<u32>;\n"
     "\n"
     "// group 1 : updated each frame\n"
     "@group(1) @binding(0)\n"
@@ -280,8 +281,13 @@ static const char rasterizer_shader[] =
     "@fragment\n"
     "fn tile_fs(in: vs_out) -> @location(0) vec4<f32> \n"
     "{\n"
+    "    var output:vec4<f32> = g_draw_args.clear_color;\n"
     "\n"
-    "    var output = vec4<f32>(0.0);\n"
+    "    let node_index:u32 = g_tile_heads[in.tile_index];\n"
+    "    if (node_index == INVALID_INDEX)\n"
+    "    {\n"
+    "        return output;\n"
+    "    }\n"
     "\n"
     "    return output;\n"
     "}\n"

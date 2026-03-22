@@ -35,7 +35,8 @@ struct draw_args
     num_tile_height: u32,
     max_nodes: u32,
     screen_div: vec2<f32>,
-    aa_width: f32
+    aa_width: f32,
+    clear_color: vec4<f32>
 };
 
 struct glyph

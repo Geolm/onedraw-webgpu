@@ -13,7 +13,7 @@ var<storage, read> g_tile_indices : array<u32>;
 var<storage, read> g_glyphs : array<glyph>;
 
 @group(0) @binding(3)
-var<storage, read_write> g_tile_heads : array<u32>;
+var<storage, read> g_tile_heads : array<u32>;
 
 // group 1 : updated each frame
 @group(1) @binding(0)
@@ -181,8 +181,13 @@ fn tile_vs(@builtin(instance_index) instance_id: u32, @builtin(vertex_index) ver
 @fragment
 fn tile_fs(in: vs_out) -> @location(0) vec4<f32> 
 {
+    var output:vec4<f32> = g_draw_args.clear_color;
 
-    var output = vec4<f32>(0.0);
+    let node_index:u32 = g_tile_heads[in.tile_index];
+    if (node_index == INVALID_INDEX)
+    {
+        return output;
+    }
 
     return output;
 }
