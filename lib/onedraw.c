@@ -64,7 +64,8 @@
 #else
 #define OD_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #endif
-#define WGPU_STRING_VIEW(s) (WGPUStringView){ .data = (s), .length = sizeof(s) - 1 }
+#define WGPU_STRING_VIEW(s) (WGPUStringView){.data = (s), .length = sizeof(s) - 1}
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Private structures
@@ -441,7 +442,7 @@ void build_binding(struct onedraw* r)
     {
         .label = WGPU_STRING_VIEW("rasterizer_layout"),
         .entries = rasterizer_layout_entries,
-        .entryCount = 8
+        .entryCount = ARRAY_SIZE(rasterizer_layout_entries)
     });
 
     WGPUBindGroupLayoutEntry frame_layout_entries[] =
@@ -513,7 +514,7 @@ void build_binding(struct onedraw* r)
     {
         .label = WGPU_STRING_VIEW("frame_layout"),
         .entries = frame_layout_entries,
-        .entryCount = 6
+        .entryCount = ARRAY_SIZE(frame_layout_entries)
     });
 
     WGPUBindGroupLayoutEntry binning_layout_entries[] = 
@@ -584,7 +585,7 @@ void build_binding(struct onedraw* r)
     {
         .label = WGPU_STRING_VIEW("binning_layout"),
         .entries = binning_layout_entries,
-        .entryCount = 6
+        .entryCount = ARRAY_SIZE(binning_layout_entries)
     });
 
     WGPUBindGroupEntry entries[] = 
@@ -603,12 +604,16 @@ void build_binding(struct onedraw* r)
     assert(r->tiles.indices != NULL);
     assert(r->font.glyphs != NULL);
     assert(r->tiles.heads != NULL);
+    assert(r->atlas.view != NULL);
+    assert(r->atlas.sampler != NULL);
+    assert(r->font.view != NULL);
+    assert(r->font.sampler != NULL);
 
     r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
         .label = WGPU_STRING_VIEW("rasterizer_group"),
         .layout = r->binding.rasterizer_layout,
-        .entryCount = sizeof(entries) / sizeof(*entries),
+        .entryCount = ARRAY_SIZE(entries),
         .entries = entries,
     });
 }
