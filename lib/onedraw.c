@@ -127,7 +127,6 @@ struct onedraw
     {
         WGPURenderPipeline pso;
         WGPUDepthStencilState depth_stencil_state;
-        WGPUTexture atlas;
         float4 clear_color;
         uint32_t width;
         uint32_t height;
@@ -138,11 +137,22 @@ struct onedraw
         bool clear_backbuffer;
     } rasterizer;
 
+    struct 
+    {
+        WGPUTexture texture;
+        WGPUTextureView view;
+        WGPUSampler sampler;
+        uint32_t num_slices;
+        uint32_t width;
+        uint32_t height;
+    } atlas;
+
     // font
     struct
     {
         WGPUTexture texture;
         WGPUTextureView view;
+        WGPUSampler sampler;
         WGPUBuffer glyphs;
         od_font desc;
     } font;
@@ -395,14 +405,43 @@ void build_binding(struct onedraw* r)
                 .minBindingSize = 0,
             }
         },
+        {   // atlas
+            .binding = 4,
+            .visibility = WGPUShaderStage_Fragment,
+            .texture =
+            {
+                .sampleType = WGPUTextureSampleType_Float,
+                .viewDimension = WGPUTextureViewDimension_2DArray,
+                .multisampled = false
+            }
+        },
+        {   // atlas sampler
+            .binding = 5,
+            .visibility = WGPUShaderStage_Fragment,
+            .sampler = {.type = WGPUSamplerBindingType_Filtering}
+        },
+        { // font
+            .binding = 6,
+            .visibility = WGPUShaderStage_Fragment,
+            .texture = 
+            {
+                .sampleType = WGPUTextureSampleType_Float,
+                .viewDimension = WGPUTextureViewDimension_2D,
+                .multisampled = false,
+            }
+        },
+        {   // font sampler
+            .binding = 7,
+            .visibility = WGPUShaderStage_Fragment,
+            .sampler = {.type = WGPUSamplerBindingType_Filtering}
+        }
     };
 
     r->binding.rasterizer_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
-        .nextInChain = NULL,
         .label = WGPU_STRING_VIEW("rasterizer_layout"),
         .entries = rasterizer_layout_entries,
-        .entryCount = 4
+        .entryCount = 8
     });
 
     WGPUBindGroupLayoutEntry frame_layout_entries[] =
@@ -472,7 +511,6 @@ void build_binding(struct onedraw* r)
 
     r->binding.frame_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
-        .nextInChain = NULL,
         .label = WGPU_STRING_VIEW("frame_layout"),
         .entries = frame_layout_entries,
         .entryCount = 6
@@ -544,7 +582,6 @@ void build_binding(struct onedraw* r)
 
     r->binding.binning_layout = wgpuDeviceCreateBindGroupLayout(r->device, &(WGPUBindGroupLayoutDescriptor)
     {
-        .nextInChain = NULL,
         .label = WGPU_STRING_VIEW("binning_layout"),
         .entries = binning_layout_entries,
         .entryCount = 6
@@ -552,30 +589,14 @@ void build_binding(struct onedraw* r)
 
     WGPUBindGroupEntry entries[] = 
     {
-        {
-            .binding = 0,
-            .buffer = r->tiles.nodes,
-            .offset = 0,
-            .size = WGPU_WHOLE_SIZE,
-        },
-        {
-            .binding = 1,
-            .buffer = r->tiles.indices,
-            .offset = 0,
-            .size = WGPU_WHOLE_SIZE,
-        },
-        {
-            .binding = 2,
-            .buffer = r->font.glyphs,
-            .offset = 0,
-            .size = WGPU_WHOLE_SIZE,
-        },
-        {
-            .binding = 3,
-            .buffer = r->tiles.heads,
-            .offset = 0,
-            .size = WGPU_WHOLE_SIZE,
-        },
+        {.binding = 0, .buffer = r->tiles.nodes, .size = WGPU_WHOLE_SIZE},
+        {.binding = 1, .buffer = r->tiles.indices, .size = WGPU_WHOLE_SIZE},
+        {.binding = 2, .buffer = r->font.glyphs, .size = WGPU_WHOLE_SIZE},
+        {.binding = 3, .buffer = r->tiles.heads, .size = WGPU_WHOLE_SIZE},
+        {.binding = 4, .textureView = r->atlas.view},
+        {.binding = 5, .sampler = r->atlas.sampler},
+        {.binding = 6, .textureView = r->font.view},
+        {.binding = 7, .sampler = r->font.sampler},
     };
 
     assert(r->tiles.nodes != NULL);
@@ -585,10 +606,9 @@ void build_binding(struct onedraw* r)
 
     r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
-        .nextInChain = NULL,
         .label = WGPU_STRING_VIEW("rasterizer_group"),
         .layout = r->binding.rasterizer_layout,
-        .entryCount = 4,
+        .entryCount = sizeof(entries) / sizeof(*entries),
         .entries = entries,
     });
 }
@@ -684,7 +704,6 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         {
             .module = shader,
             .entryPoint = WGPU_STRING_VIEW("tile_bin"),
-            .nextInChain = NULL,
             .constants = NULL
         }
     };
@@ -699,7 +718,6 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         {
             .module = shader,
             .entryPoint = WGPU_STRING_VIEW("write_indirect_args"),
-            .nextInChain = NULL,
             .constants = NULL
         }
     };
@@ -738,6 +756,23 @@ void build_font(struct onedraw* r)
 
     r->font.view = wgpuTextureCreateView(r->font.texture, NULL);
     assert_msg(r->font.view != NULL, "default font texture view creation failed");
+
+    WGPUSamplerDescriptor sampler_desc = 
+    {
+        .label = WGPU_STRING_VIEW("font sampler"), 
+        .addressModeU = WGPUAddressMode_ClampToEdge,
+        .addressModeV = WGPUAddressMode_ClampToEdge,
+        .addressModeW = WGPUAddressMode_ClampToEdge,
+        .magFilter = WGPUFilterMode_Linear,
+        .minFilter = WGPUFilterMode_Linear,
+        .mipmapFilter = WGPUMipmapFilterMode_Nearest, // no mipmap
+        .lodMinClamp = 0.0f,
+        .lodMaxClamp = 1.0f,
+        .maxAnisotropy = 1.f
+    };
+
+    r->font.sampler = wgpuDeviceCreateSampler(r->device, &sampler_desc);
+    assert_msg(r->font.sampler != NULL, "cannot create font sampler");
 
     WGPUTexelCopyTextureInfo copy_info = 
     {
@@ -791,7 +826,6 @@ void build_font(struct onedraw* r)
     {
         .size = gpu_font_size,
         .mappedAtCreation = true,
-        .nextInChain = NULL,
         .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
         .label = WGPU_STRING_VIEW("gpu_font")
     });
@@ -803,11 +837,68 @@ void build_font(struct onedraw* r)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
+void create_atlas(struct onedraw* r, const onedraw_def* def)
+{
+    // create a dummy if not needed to please the bind group
+    if (def->atlas.height == 0 || def->atlas.width == 0 || def->atlas.num_slices == 0)
+    {
+        r->atlas.num_slices = 1;
+        r->atlas.width = 1;
+        r->atlas.height = 1;
+    }
+    else
+    {
+        assert_msg(false, "to be implemented");
+    }
+
+    WGPUTextureDescriptor atlas_desc = 
+    {
+        .size = {r->atlas.width, r->atlas.height, r->atlas.num_slices},
+        .mipLevelCount = 1,
+        .sampleCount = 1,
+        .dimension = WGPUTextureDimension_2D,
+        .format = WGPUTextureFormat_RGBA8Unorm,
+        .usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst,
+    };
+
+    r->atlas.texture = wgpuDeviceCreateTexture(r->device, &atlas_desc);
+    assert_msg(r->atlas.texture != NULL, "failed to create atlas texture");
+
+    r->atlas.view = wgpuTextureCreateView(r->atlas.texture, &(WGPUTextureViewDescriptor)
+    {
+        .label = WGPU_STRING_VIEW("atlas texture view"),
+        .format = WGPUTextureFormat_RGBA8Unorm,
+        .dimension = WGPUTextureViewDimension_2DArray,
+        .mipLevelCount = 1,
+        .arrayLayerCount = r->atlas.num_slices,
+        .aspect = WGPUTextureAspect_All,
+    });
+    assert_msg(r->atlas.view != NULL, "default atlas texture view creation failed");
+
+    WGPUSamplerDescriptor sampler_desc = 
+    {
+        .label = WGPU_STRING_VIEW("atlas sampler"), 
+        .addressModeU = WGPUAddressMode_ClampToEdge,
+        .addressModeV = WGPUAddressMode_ClampToEdge,
+        .addressModeW = WGPUAddressMode_ClampToEdge,
+        .magFilter = WGPUFilterMode_Linear,
+        .minFilter = WGPUFilterMode_Linear,
+        .mipmapFilter = WGPUMipmapFilterMode_Nearest, // no mipmap
+        .lodMinClamp = 0.0f,
+        .lodMaxClamp = 1.0f,
+        .maxAnisotropy = 1.f
+    };
+
+    r->atlas.sampler = wgpuDeviceCreateSampler(r->device, &sampler_desc);
+    assert_msg(r->atlas.sampler != NULL, "cannot create atlas sampler");
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 // public functions
 // ---------------------------------------------------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------------------------------------------------
-struct onedraw* od_init(onedraw_def* def)
+struct onedraw* od_init(const onedraw_def* def)
 {
     assert_msg(def->preallocated_buffer != NULL, "forgot to allocate memory?");
     assert_msg(((uintptr_t)def->preallocated_buffer)%sizeof(uintptr_t) == 0, "preallocated_buffer must be aligned on sizeof(uintptr_t)");
@@ -832,7 +923,6 @@ struct onedraw* od_init(onedraw_def* def)
     {
         .label = WGPU_STRING_VIEW("tile_counters"),
         .mappedAtCreation = false,
-        .nextInChain = NULL,
         .size = sizeof(uint32_t) * 2,
         .usage = WGPUBufferUsage_Storage
     });
@@ -842,7 +932,6 @@ struct onedraw* od_init(onedraw_def* def)
     {
         .label = WGPU_STRING_VIEW("tile_nodes"),
         .mappedAtCreation = false,
-        .nextInChain = NULL,
         .size = sizeof(uint64_t) * MAX_NODES_COUNT,
         .usage = WGPUBufferUsage_Storage
     });
@@ -852,12 +941,12 @@ struct onedraw* od_init(onedraw_def* def)
     {
         .label = WGPU_STRING_VIEW("indirect_draw_params"),
         .mappedAtCreation = false,
-        .nextInChain = NULL,
         .size = sizeof(indirect_params),
         .usage = WGPUBufferUsage_Storage
     });
     assert_msg(r->tiles.indirect_draw_params != NULL, "failed to indirect draw params buffer");
 
+    create_atlas(r, def);
     od_resize(r, def->viewport_width, def->viewport_height);
     build_font(r);
     build_binding(r);
@@ -996,6 +1085,10 @@ float od_get_gputime(struct onedraw* r)
 //----------------------------------------------------------------------------------------------------------------------------
 void od_terminate(struct onedraw* r)
 {
+    SAFE_RELEASE(r->atlas.sampler, wgpuSamplerRelease);
+    SAFE_RELEASE(r->atlas.view, wgpuTextureViewRelease);
+    SAFE_RELEASE(r->atlas.texture, wgpuTextureRelease);
+    SAFE_RELEASE(r->font.sampler, wgpuSamplerRelease);
     SAFE_RELEASE(r->font.view, wgpuTextureViewRelease);
     SAFE_RELEASE(r->font.texture, wgpuTextureRelease);
     SAFE_RELEASE(r->binding.rasterizer_layout, wgpuBindGroupLayoutRelease);

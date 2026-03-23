@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 23724;
+static const size_t rasterizer_shader_size = 23640;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -605,7 +605,6 @@ static const char rasterizer_shader[] =
     "                        if (all(t >= vec2<f32>(0.0)) && all(t <= vec2<f32>(1.0))) \n"
     "                        {\n"
     "                            let uv = mix(uv_topleft, uv_bottomright, t);\n"
-    "                            // extra contains the layer index for the texture array\n"
     "                            let tex_color = textureSample(g_atlas, g_atlas_sampler, uv, i32(extra));\n"
     "                            cmd_color = cmd_color * tex_color;\n"
     "                            distance = 0.0;\n"

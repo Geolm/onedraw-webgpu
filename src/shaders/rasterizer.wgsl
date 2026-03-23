@@ -419,7 +419,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                         if (all(t >= vec2<f32>(0.0)) && all(t <= vec2<f32>(1.0))) 
                         {
                             let uv = mix(uv_topleft, uv_bottomright, t);
-                            // extra contains the layer index for the texture array
                             let tex_color = textureSample(g_atlas, g_atlas_sampler, uv, i32(extra));
                             cmd_color = cmd_color * tex_color;
                             distance = 0.0;
