@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------------------------------------------------------
-// Common structures/functions
+// Structures
 // ---------------------------------------------------------------------------------------------------------------------------
 
 struct draw_command 
@@ -8,19 +8,11 @@ struct draw_command
     flags      : u32 // extra (8) | clip_index (8) | fillmode (8) | type (8)
 };
 
-fn get_extra(cmd: draw_command) -> u32  {return cmd.flags & 0xFFu;}
-fn get_clip(cmd: draw_command) -> u32 {return (cmd.flags >> 8u) & 0xFFu;}
-fn get_fillmode(cmd: draw_command) -> u32 {return (cmd.flags >> 16u) & 0xFFu;}
-fn get_type(cmd: draw_command) -> u32 {return (cmd.flags >> 24u) & 0xFFu;}
-
 struct tile_node
 {
     next          : u32,
     command_index : u32 // command index + command type
 };
-
-fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}
-fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}
 
 struct counters
 {
@@ -36,7 +28,8 @@ struct draw_args
     max_nodes: u32,
     screen_div: vec2<f32>,
     aa_width: f32,
-    clear_color: vec4<f32>
+    clear_color: vec4<f32>,
+    srgb_backbuffer: u32
 };
 
 struct glyph
@@ -77,18 +70,111 @@ struct indirect_params
     first_instance: u32
 };
 
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------------------------------------------------------------------
+
+fn get_extra(cmd: draw_command) -> u32  {return cmd.flags & 0xFFu;}
+fn get_clip(cmd: draw_command) -> u32 {return (cmd.flags >> 8u) & 0xFFu;}
+fn get_fillmode(cmd: draw_command) -> u32 {return (cmd.flags >> 16u) & 0xFFu;}
+fn get_type(cmd: draw_command) -> u32 {return (cmd.flags >> 24u) & 0xFFu;}
+fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}
+fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}
+
+
+fn accumulate_color(color: vec4<f32>, backbuffer: vec4<f32>) -> vec4<f32> 
+{
+    let rgb = mix(backbuffer.rgb, color.rgb, color.a);
+    return vec4<f32>(rgb, 1.0);
+}
+
+fn linear_to_srgb_channel(c: f32) -> f32 
+{
+    if (c <= 0.0031308) 
+    {
+        return c * 12.92;
+    } else 
+    {
+        return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+    }
+}
+
+fn linear_to_srgb(linear_color: vec4<f32>) -> vec4<f32> 
+{
+    return vec4<f32>(
+        linear_to_srgb_channel(linear_color.r),
+        linear_to_srgb_channel(linear_color.g),
+        linear_to_srgb_channel(linear_color.b),
+        linear_color.a
+    );
+}
+
+fn srgb_to_linear(srgb: vec4<f32>) -> vec4<f32> 
+{
+    let rgb = srgb.rgb;
+    let linear_rgb = select(
+        pow((rgb + 0.055) / 1.055, vec3<f32>(2.4)),
+        rgb / 12.92,
+        rgb <= vec3<f32>(0.04045)
+    );
+    return vec4<f32>(linear_rgb, srgb.a);
+}
+
+fn saturate(x: f32) -> f32 
+{
+    return clamp(x, 0.0, 1.0);
+}
+
+fn linearstep(edge0: f32, edge1: f32, x: f32) -> f32 
+{
+    return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+}
+
+fn skew(v: vec2<f32>) -> vec2<f32> 
+{
+    return vec2<f32>(-v.y, v.x);
+}
+
+fn distance_squared(a: vec2<f32>, b: vec2<f32>) -> f32 
+{
+    let d = a - b;
+    return dot(d, d);
+}
+
+fn length_squared(v: vec2<f32>) -> f32 
+{
+    return dot(v, v);
+}
+
+fn square(x: f32) -> f32 
+{
+    return x * x;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------------------------------------------------------
 
 const TILE_SIZE: f32 = 16.0;
-const PRIMITIVE_ORIENTED_BOX: u32 = 0u;
-const PRIMITIVE_ELLIPSE: u32 = 1u;
-const PRIMITIVE_ARC: u32 = 2u;
-const PRIMITIVE_PIE: u32 = 3u;
-const PRIMITIVE_DISC: u32 = 4u;
-const PRIMITIVE_TRIANGLE: u32 = 5u;
-const BEGIN_GROUP: u32 = 16;
-const END_GROUP: u32 = 17;
+const PRIMITIVE_CHAR: u32 = 0u;
+const PRIMITIVE_AABOX: u32 = 1u;
+const PRIMITIVE_ORIENTED_BOX: u32 = 2u;
+const PRIMITIVE_DISC: u32 = 3u;
+const PRIMITIVE_TRIANGLE: u32 = 4u;
+const PRIMITIVE_ELLIPSE: u32 = 5u;
+const PRIMITIVE_PIE: u32 = 6u;
+const PRIMITIVE_ARC: u32 = 7u;
+const PRIMITIVE_BLURRED_BOX: u32 = 8u;
+const PRIMITIVE_QUAD: u32 = 9u;
+const PRIMITIVE_ORIENTED_QUAD: u32 = 10u;
+const BEGIN_GROUP: u32 = 32u;
+const END_GROUP: u32 = 33u;
 const INVALID_INDEX:u32 = 0xFFFFFFFFu;
+const OP_OVERWRITE:u32 = 0u;
+const OP_BLEND:u32 = 1u;
+const FILL_SOLID:u32 = 0u;
+const FILL_OUTLINE:u32 = 1u;
+const FILL_HOLLOW:u32 = 2u;
+const FILL_GRADIENT:u32 = 3u;
 

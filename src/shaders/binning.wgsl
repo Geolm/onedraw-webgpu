@@ -44,27 +44,6 @@ var<storage, read> g_colors: array<u32>;
 // Helpers
 // ---------------------------------------------------------------------------------------------------------------------------
 
-fn skew(v: vec2<f32>) -> vec2<f32> 
-{
-    return vec2<f32>(-v.y, v.x);
-}
-
-fn distance_squared(a: vec2<f32>, b: vec2<f32>) -> f32 
-{
-    let d = a - b;
-    return dot(d, d);
-}
-
-fn length_squared(v: vec2<f32>) -> f32 
-{
-    return dot(v, v);
-}
-
-fn square(x: f32) -> f32 
-{
-    return x * x;
-}
-
 fn aabb_grow(box: aabb, amount: vec2<f32>) -> aabb 
 {
     return aabb(box.min - amount, box.max + amount);
