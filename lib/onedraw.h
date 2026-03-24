@@ -79,9 +79,17 @@ typedef struct od_font
     uint16_t texture_height;
 } od_font;
 
+typedef struct od_mem_interface
+{
+    void*  (*malloc_fn)(size_t size, void* user);
+    void*  (*realloc_fn)(void* old_ptr, size_t old_size, size_t new_size, void* user);
+    void   (*free_fn)(void* ptr, void* user);
+    void*   user;
+} od_mem_interface;
+
 typedef struct onedraw_def
 {
-    void* preallocated_buffer;
+    od_mem_interface* mem_interface;
     WGPUDevice device;
     WGPUTextureFormat surface_format;
     uint32_t viewport_width;
@@ -107,12 +115,6 @@ extern "C" {
 //----------------------------------------------------------------------------------------------------------------------------
 // API
 //----------------------------------------------------------------------------------------------------------------------------
-
-//-----------------------------------------------------------------------------------------------------------------------------
-// Returns the number of bytes needed by the library 
-// ==>  as the lib allocates gpu buffers, the total memory usage is higher than this and depends on resolution
-//      use od_stats() to know the gpu memory usage
-size_t od_min_memory_size(void);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Initializes the library

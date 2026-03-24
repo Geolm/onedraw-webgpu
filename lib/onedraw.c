@@ -32,6 +32,7 @@
 #include <float.h>
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "default_font.h"
 #include "default_font_atlas.h"
@@ -51,6 +52,7 @@
 #define FRAME_COUNT (3)
 #define TILE_SIZE (16)
 #define MAX_NODES_COUNT (1U<<22)
+#define MAX_COMMANDS (1U<<16)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -71,13 +73,17 @@
 // Private structures
 // ---------------------------------------------------------------------------------------------------------------------------
 
-typedef struct {float x, y, z, w;} float4;
+typedef struct {float x, y, z, w;} vec4;
 typedef uint32_t quantized_aabb;
 typedef enum sdf_operator {op_additive, op_subtractive} sdf_operator;
 
 typedef struct dynamic_buffer
 {
     WGPUBuffer buffers[FRAME_COUNT];
+    size_t element_size;
+    size_t num_elements;
+    size_t num_elements_max;
+    uint8_t* cpu_buffer;
 } dynamic_buffer;
 
 struct onedraw
@@ -88,6 +94,7 @@ struct onedraw
 
     struct
     {
+        dynamic_buffer draw_args;
         dynamic_buffer buffer;
         dynamic_buffer colors;
         dynamic_buffer aabb_buffer;
@@ -128,7 +135,7 @@ struct onedraw
     {
         WGPURenderPipeline pso;
         WGPUDepthStencilState depth_stencil_state;
-        float4 clear_color;
+        vec4 clear_color;
         uint32_t width;
         uint32_t height;
         float aa_width;
@@ -188,6 +195,7 @@ struct onedraw
         WGPUBindGroupLayout frame_layout;
     } binding;
 
+    od_mem_interface mem_interface;
     void (*custom_log)(const char* string);
     char string_buffer[STRING_BUFFER_SIZE];
 };
@@ -196,6 +204,19 @@ typedef struct vec2 {float x, y;} vec2;
 typedef struct aabb {vec2 min, max;} aabb;
 typedef struct quadratic_bezier {vec2 c0, c1, c2;} quadratic_bezier;
 typedef struct cubic_bezier {vec2 c0, c1, c2, c3;} cubic_bezier;
+
+// must be in sync with common.wgsl
+typedef struct gpu_draw_args
+{
+    uint32_t num_commands;
+    uint32_t num_tile_width;
+    uint32_t num_tile_height;
+    uint32_t max_nodes;
+    vec2 screen_div;
+    float aa_width;
+    vec4 clear_color;
+    uint32_t srgb_backbuffer;
+} gpu_draw_args;
 
 typedef struct gpu_char
 {
@@ -213,9 +234,27 @@ typedef struct indirect_params
     uint32_t first_instance;
 } indirect_params;
 
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // private functions
 // ---------------------------------------------------------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------------------------------------------------------
+static inline void* malloc_wrapper(size_t size, void* user) {(void)user; return malloc(size);}
+static inline void* realloc_wrapper(void* old_ptr, size_t old_size, size_t new_size, void* user){(void)user;(void)old_size;return realloc(old_ptr, new_size);}
+static inline void free_wrapper(void* ptr, void* user) {(void)user; free(ptr);}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+static inline od_mem_interface default_allocator(void) 
+{
+    return (od_mem_interface) 
+    {
+        .malloc_fn  = malloc_wrapper,
+        .realloc_fn = realloc_wrapper,
+        .free_fn    = free_wrapper,
+        .user       = NULL
+    };
+}
 
 static inline float float_max(float a, float b) {return (a>b) ? a : b;}
 static inline float float_clamp(float f, float a, float b) {if (f<a) return a; if (f>b) return b; return f;}
@@ -356,9 +395,24 @@ void od_log(struct onedraw* r, const char* string, ...)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-size_t od_min_memory_size(void)
+void dynamic_buffer_init(struct onedraw* r, dynamic_buffer* b, size_t element_size, size_t num_elements_max)
 {
-    return sizeof(struct onedraw);
+    b->element_size = element_size;
+    b->num_elements = 0;
+    b->num_elements_max = num_elements_max;
+
+    size_t alloc_size = element_size * num_elements_max;
+    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    {
+        b->buffers[i] = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        {
+            .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
+            .size = alloc_size
+        });
+        assert_msg(b->buffers[i] != NULL, "failed to create storage buffer");
+    }
+
+    b->cpu_buffer = r->mem_interface.malloc_fn(alloc_size, r->mem_interface.user);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -447,12 +501,12 @@ void build_layout(struct onedraw* r)
 
     WGPUBindGroupLayoutEntry frame_layout_entries[] =
     {
-        { // g_draw_args (uniform)
+        { // g_draw_args
             .binding = 0,
             .visibility = WGPUShaderStage_Compute | WGPUShaderStage_Vertex | WGPUShaderStage_Fragment,
             .buffer = 
             {
-                .type = WGPUBufferBindingType_Uniform,
+                .type = WGPUBufferBindingType_ReadOnlyStorage,
                 .hasDynamicOffset = false,
                 .minBindingSize = 0,
             }
@@ -633,6 +687,18 @@ void build_bind_groups(struct onedraw* r)
         .entries = binning_entries
     });
     assert_msg(r->binding.binning_group != NULL, "cannot create rasterizer binding group");
+
+    // for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    // {
+    //     WGPUBindGroupEntry frame_entries[] = 
+    //     {
+    //         {.binding = 0, .buffer = r->commands.draw_args.buffers[i], .size = WGPU_WHOLE_SIZE},
+    //         {.binding = 1, .buffer = r->tiles.indices, .size = WGPU_WHOLE_SIZE},
+    //         {.binding = 2, .buffer = r->tiles.counters, .size = WGPU_WHOLE_SIZE},
+    //         {.binding = 3, .buffer = r->tiles.heads, .size = WGPU_WHOLE_SIZE},
+    //         {.binding = 4, .buffer = r->tiles.indirect_draw_params, .size = WGPU_WHOLE_SIZE}
+    //     };
+    // }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -915,6 +981,12 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
     assert_msg(r->atlas.sampler != NULL, "cannot create atlas sampler");
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+void allocate_dynamic_buffers(struct onedraw* r)
+{
+    dynamic_buffer_init(r, &r->commands.draw_args, sizeof(gpu_draw_args), 1);
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // public functions
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -922,21 +994,21 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
 //----------------------------------------------------------------------------------------------------------------------------
 struct onedraw* od_init(const onedraw_def* def)
 {
-    assert_msg(def->preallocated_buffer != NULL, "forgot to allocate memory?");
-    assert_msg(((uintptr_t)def->preallocated_buffer)%sizeof(uintptr_t) == 0, "preallocated_buffer must be aligned on sizeof(uintptr_t)");
+    od_mem_interface mem_interface = (def->mem_interface != NULL) ? (*def->mem_interface) : default_allocator();
+    
+    struct onedraw* r = mem_interface.malloc_fn(sizeof(struct onedraw), mem_interface.user);
     assert(def->device != NULL);
-
-    struct onedraw* r = (struct onedraw*) def->preallocated_buffer;
 
     // clear everything to zero
     *r = (struct onedraw) {0};
 
+    r->mem_interface = mem_interface;
     r->custom_log = def->log_func;
     r->device = def->device;
     r->rasterizer.srgb_backbuffer = def->srgb_backbuffer;
     r->rasterizer.aa_width = VEC2_SQR2;
     r->rasterizer.clear_backbuffer = true;
-    r->rasterizer.clear_color = (float4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
+    r->rasterizer.clear_color = (vec4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
     r->queue = wgpuDeviceGetQueue(r->device);
     assert_msg(r->queue != NULL, "cannot create queue from device");
 
@@ -970,6 +1042,7 @@ struct onedraw* od_init(const onedraw_def* def)
 
     create_atlas(r, def);
     od_resize(r, def->viewport_width, def->viewport_height);
+    allocate_dynamic_buffers(r);
     build_font(r);
     build_layout(r);
     build_bind_groups(r);
@@ -1116,6 +1189,7 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->tiles.nodes, wgpuBufferRelease);
     SAFE_RELEASE(r->tiles.heads, wgpuBufferRelease);
     SAFE_RELEASE(r->rasterizer.pso, wgpuRenderPipelineRelease);
+    r->mem_interface.free_fn(r, r->mem_interface.user);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------

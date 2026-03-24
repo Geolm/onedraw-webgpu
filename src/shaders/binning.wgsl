@@ -20,7 +20,7 @@ var<storage, read_write> g_indirect_draw : indirect_params;
 
 // group 1 : updated each frame
 @group(1) @binding(0)
-var<uniform> g_draw_args: draw_args;
+var<storage, read> g_draw_args: draw_args;
 
 @group(1) @binding(1)
 var<storage, read> g_commands : array<draw_command>;

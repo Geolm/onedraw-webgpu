@@ -22,7 +22,6 @@ void init(void)
     renderer = od_init( &(onedraw_def)
     {
         .device = wgpu.device,
-        .preallocated_buffer = malloc(od_min_memory_size()),
         .viewport_width = wgpu.surface_cfg.width,
         .viewport_height = wgpu.surface_cfg.height,
         .srgb_backbuffer = true,
@@ -55,7 +54,6 @@ void frame(void)
 void cleanup(void)
 {
     od_terminate(renderer);
-    free(renderer);
     terminate_webgpu(&wgpu);
 }
 

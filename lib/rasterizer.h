@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 23640;
+static const size_t rasterizer_shader_size = 23646;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -215,7 +215,7 @@ static const char rasterizer_shader[] =
     "\n"
     "// group 1 : updated each frame\n"
     "@group(1) @binding(0)\n"
-    "var<uniform> g_draw_args: draw_args;\n"
+    "var<storage, read> g_draw_args: draw_args;\n"
     "\n"
     "@group(1) @binding(1)\n"
     "var<storage, read> g_commands : array<draw_command>;\n"
