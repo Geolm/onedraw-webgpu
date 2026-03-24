@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 25334;
+static const size_t binning_shader_size = 25261;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -199,12 +199,9 @@ static const char binning_shader[] =
     "var<storage, read_write> g_counters : counters;\n"
     "\n"
     "@group(0) @binding(3)\n"
-    "var<storage, read_write> g_glyphs : array<glyph>;\n"
-    "\n"
-    "@group(0) @binding(4)\n"
     "var<storage, read_write> g_tile_heads : array<u32>;\n"
     "\n"
-    "@group(0) @binding(5)\n"
+    "@group(0) @binding(4)\n"
     "var<storage, read_write> g_indirect_draw : indirect_params;\n"
     "\n"
     "// group 1 : updated each frame\n"

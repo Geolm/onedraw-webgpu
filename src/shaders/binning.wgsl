@@ -13,12 +13,9 @@ var<storage, read_write> g_tile_indices : array<u32>;
 var<storage, read_write> g_counters : counters;
 
 @group(0) @binding(3)
-var<storage, read_write> g_glyphs : array<glyph>;
-
-@group(0) @binding(4)
 var<storage, read_write> g_tile_heads : array<u32>;
 
-@group(0) @binding(5)
+@group(0) @binding(4)
 var<storage, read_write> g_indirect_draw : indirect_params;
 
 // group 1 : updated each frame

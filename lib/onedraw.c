@@ -362,7 +362,7 @@ size_t od_min_memory_size(void)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-void build_binding(struct onedraw* r)
+void build_layout(struct onedraw* r)
 {
     WGPUBindGroupLayoutEntry rasterizer_layout_entries[] = 
     {
@@ -549,18 +549,8 @@ void build_binding(struct onedraw* r)
                 .minBindingSize = 0,
             }
         },
-        {   // glyphs
-            .binding = 3,
-            .visibility = WGPUShaderStage_Fragment,
-            .buffer =
-            {
-                .type = WGPUBufferBindingType_ReadOnlyStorage,
-                .hasDynamicOffset = false,
-                .minBindingSize = 0,
-            }
-        },
         {   // heads
-            .binding = 4,
+            .binding = 3,
             .visibility = WGPUShaderStage_Compute,
             .buffer =
             {
@@ -570,7 +560,7 @@ void build_binding(struct onedraw* r)
             }
         },
         {   // indirect_draw_params
-            .binding = 5,
+            .binding = 4,
             .visibility = WGPUShaderStage_Compute,
             .buffer =
             {
@@ -587,8 +577,12 @@ void build_binding(struct onedraw* r)
         .entries = binning_layout_entries,
         .entryCount = ARRAY_SIZE(binning_layout_entries)
     });
+}
 
-    WGPUBindGroupEntry entries[] = 
+//-----------------------------------------------------------------------------------------------------------------------------
+void build_bind_groups(struct onedraw* r)
+{
+    WGPUBindGroupEntry rasterizer_entries[] = 
     {
         {.binding = 0, .buffer = r->tiles.nodes, .size = WGPU_WHOLE_SIZE},
         {.binding = 1, .buffer = r->tiles.indices, .size = WGPU_WHOLE_SIZE},
@@ -613,9 +607,32 @@ void build_binding(struct onedraw* r)
     {
         .label = WGPU_STRING_VIEW("rasterizer_group"),
         .layout = r->binding.rasterizer_layout,
-        .entryCount = ARRAY_SIZE(entries),
-        .entries = entries,
+        .entryCount = ARRAY_SIZE(rasterizer_entries),
+        .entries = rasterizer_entries
     });
+    assert_msg(r->binding.rasterizer_group != NULL, "cannot create rasterizer binding group");
+
+    WGPUBindGroupEntry binning_entries[] = 
+    {
+        {.binding = 0, .buffer = r->tiles.nodes, .size = WGPU_WHOLE_SIZE},
+        {.binding = 1, .buffer = r->tiles.indices, .size = WGPU_WHOLE_SIZE},
+        {.binding = 2, .buffer = r->tiles.counters, .size = WGPU_WHOLE_SIZE},
+        {.binding = 3, .buffer = r->tiles.heads, .size = WGPU_WHOLE_SIZE},
+        {.binding = 4, .buffer = r->tiles.indirect_draw_params, .size = WGPU_WHOLE_SIZE}
+    };
+
+    assert(r->tiles.counters != NULL);
+    assert(r->tiles.heads != NULL);
+    assert(r->tiles.indirect_draw_params != NULL);
+
+    r->binding.binning_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
+    {
+        .label = WGPU_STRING_VIEW("binning_group"),
+        .layout = r->binding.binning_layout,
+        .entryCount = ARRAY_SIZE(binning_entries),
+        .entries = binning_entries
+    });
+    assert_msg(r->binding.binning_group != NULL, "cannot create rasterizer binding group");
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -954,13 +971,10 @@ struct onedraw* od_init(const onedraw_def* def)
     create_atlas(r, def);
     od_resize(r, def->viewport_width, def->viewport_height);
     build_font(r);
-    build_binding(r);
+    build_layout(r);
+    build_bind_groups(r);
     build_pso(r, def->surface_format);
     // od_build_depthstencil_state(r);
-    
-
-    // if (def->atlas.width != 0)
-    //     od_create_atlas(r, def->atlas.width, def->atlas.height, def->atlas.num_slices);
 
     return r;
 }
