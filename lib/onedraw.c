@@ -53,6 +53,7 @@
 #define TILE_SIZE (16)
 #define MAX_NODES_COUNT (1U<<22)
 #define MAX_COMMANDS (1U<<16)
+#define MAX_DRAWDATA (MAX_COMMANDS*4)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -68,6 +69,14 @@
 #endif
 #define WGPU_STRING_VIEW(s) (WGPUStringView){.data = (s), .length = sizeof(s) - 1}
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
+#define DB_PUSH(db, TYPE, VALUE)                                      \
+    do {                                                              \
+        assert((db)->element_size == sizeof(TYPE));                   \
+        assert((db)->num_elements < (db)->num_elements_max);           \
+                                                                      \
+        TYPE* _ptr = (TYPE*)((db)->cpu_buffer);                        \
+        _ptr[(db)->num_elements++] = (VALUE);                          \
+    } while (0)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Private structures
@@ -83,7 +92,7 @@ typedef struct dynamic_buffer
     size_t element_size;
     size_t num_elements;
     size_t num_elements_max;
-    uint8_t* cpu_buffer;
+    void* cpu_buffer;
 } dynamic_buffer;
 
 struct onedraw
@@ -95,11 +104,11 @@ struct onedraw
     struct
     {
         dynamic_buffer draw_args;
-        dynamic_buffer buffer;
+        dynamic_buffer list;
         dynamic_buffer colors;
-        dynamic_buffer aabb_buffer;
-        dynamic_buffer data_buffer;
-        dynamic_buffer clipshapes_buffer;
+        dynamic_buffer aabb;
+        dynamic_buffer float_data;
+        dynamic_buffer clipshapes;
         uint32_t count;
         quantized_aabb* group_aabb;
     } commands;
@@ -187,9 +196,9 @@ struct onedraw
 
     struct
     {
-        WGPUBindGroup rasterizer_group;
-        WGPUBindGroup binning_group;
-        WGPUBindGroup dynamic_group[FRAME_COUNT];
+        WGPUBindGroup rasterizer_bindgroup;
+        WGPUBindGroup binning_bindgroup;
+        WGPUBindGroup frame_bindgroup[FRAME_COUNT];
         WGPUBindGroupLayout rasterizer_layout;
         WGPUBindGroupLayout binning_layout;
         WGPUBindGroupLayout frame_layout;
@@ -205,7 +214,8 @@ typedef struct aabb {vec2 min, max;} aabb;
 typedef struct quadratic_bezier {vec2 c0, c1, c2;} quadratic_bezier;
 typedef struct cubic_bezier {vec2 c0, c1, c2, c3;} cubic_bezier;
 
-// must be in sync with common.wgsl
+// ---------------------------------------------------------------------------------------------------------------------------
+// Warning : the gpu structures must be in sync with the one in common.wgsl
 typedef struct gpu_draw_args
 {
     uint32_t num_commands;
@@ -218,6 +228,12 @@ typedef struct gpu_draw_args
     uint32_t srgb_backbuffer;
 } gpu_draw_args;
 
+typedef struct gpu_draw_command 
+{
+    uint32_t data_index;
+    uint32_t flags; // extra (8) | clip_index (8) | fillmode (8) | type (8)
+} gpu_draw_command;
+
 typedef struct gpu_char
 {
     vec2 uv_topleft;
@@ -226,13 +242,13 @@ typedef struct gpu_char
     float height;
 } gpu_char;
 
-typedef struct indirect_params
+typedef struct gpu_indirect_params
 {
     uint32_t vertex_count;
     uint32_t instance_count;
     uint32_t first_vertex;
     uint32_t first_instance;
-} indirect_params;
+} gpu_indirect_params;
 
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -413,6 +429,15 @@ void dynamic_buffer_init(struct onedraw* r, dynamic_buffer* b, size_t element_si
     }
 
     b->cpu_buffer = r->mem_interface.malloc_fn(alloc_size, r->mem_interface.user);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void dynamic_buffer_terminate(struct onedraw* r, dynamic_buffer* b)
+{
+    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+        SAFE_RELEASE(b->buffers[i], wgpuBufferRelease);
+    
+    r->mem_interface.free_fn(b->cpu_buffer, r->mem_interface.user);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -657,14 +682,14 @@ void build_bind_groups(struct onedraw* r)
     assert(r->font.view != NULL);
     assert(r->font.sampler != NULL);
 
-    r->binding.rasterizer_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
+    r->binding.rasterizer_bindgroup =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
-        .label = WGPU_STRING_VIEW("rasterizer_group"),
+        .label = WGPU_STRING_VIEW("rasterizer bindgroup"),
         .layout = r->binding.rasterizer_layout,
         .entryCount = ARRAY_SIZE(rasterizer_entries),
         .entries = rasterizer_entries
     });
-    assert_msg(r->binding.rasterizer_group != NULL, "cannot create rasterizer binding group");
+    assert_msg(r->binding.rasterizer_bindgroup != NULL, "cannot create rasterizer binding group");
 
     WGPUBindGroupEntry binning_entries[] = 
     {
@@ -679,26 +704,36 @@ void build_bind_groups(struct onedraw* r)
     assert(r->tiles.heads != NULL);
     assert(r->tiles.indirect_draw_params != NULL);
 
-    r->binding.binning_group =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
+    r->binding.binning_bindgroup =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
-        .label = WGPU_STRING_VIEW("binning_group"),
+        .label = WGPU_STRING_VIEW("binning bindgroup"),
         .layout = r->binding.binning_layout,
         .entryCount = ARRAY_SIZE(binning_entries),
         .entries = binning_entries
     });
-    assert_msg(r->binding.binning_group != NULL, "cannot create rasterizer binding group");
+    assert_msg(r->binding.binning_bindgroup != NULL, "cannot create rasterizer binding group");
 
-    // for(uint32_t i=0; i<FRAME_COUNT; ++i)
-    // {
-    //     WGPUBindGroupEntry frame_entries[] = 
-    //     {
-    //         {.binding = 0, .buffer = r->commands.draw_args.buffers[i], .size = WGPU_WHOLE_SIZE},
-    //         {.binding = 1, .buffer = r->tiles.indices, .size = WGPU_WHOLE_SIZE},
-    //         {.binding = 2, .buffer = r->tiles.counters, .size = WGPU_WHOLE_SIZE},
-    //         {.binding = 3, .buffer = r->tiles.heads, .size = WGPU_WHOLE_SIZE},
-    //         {.binding = 4, .buffer = r->tiles.indirect_draw_params, .size = WGPU_WHOLE_SIZE}
-    //     };
-    // }
+    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    {
+        WGPUBindGroupEntry frame_entries[] = 
+        {
+            {.binding = 0, .buffer = r->commands.draw_args.buffers[i], .size = WGPU_WHOLE_SIZE},
+            {.binding = 1, .buffer = r->commands.list.buffers[i], .size = WGPU_WHOLE_SIZE},
+            {.binding = 2, .buffer = r->commands.aabb.buffers[i], .size = WGPU_WHOLE_SIZE},
+            {.binding = 3, .buffer = r->commands.float_data.buffers[i], .size = WGPU_WHOLE_SIZE},
+            {.binding = 4, .buffer = r->commands.clipshapes.buffers[i], .size = WGPU_WHOLE_SIZE},
+            {.binding = 5, .buffer = r->commands.colors.buffers[i], .size = WGPU_WHOLE_SIZE}
+        };
+
+        r->binding.frame_bindgroup[i] =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
+        {
+            .label = WGPU_STRING_VIEW("frame bindgroup"),
+            .layout = r->binding.frame_layout,
+            .entryCount = ARRAY_SIZE(frame_entries),
+            .entries = frame_entries
+        });
+        assert_msg(r->binding.frame_bindgroup[i] != NULL, "cannot create frame binding groups");
+    }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -985,6 +1020,11 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
 void allocate_dynamic_buffers(struct onedraw* r)
 {
     dynamic_buffer_init(r, &r->commands.draw_args, sizeof(gpu_draw_args), 1);
+    dynamic_buffer_init(r, &r->commands.aabb, sizeof(uint32_t), MAX_COMMANDS);
+    dynamic_buffer_init(r, &r->commands.list, sizeof(gpu_draw_command), MAX_COMMANDS);
+    dynamic_buffer_init(r, &r->commands.colors, sizeof(uint32_t), MAX_COMMANDS);
+    dynamic_buffer_init(r, &r->commands.clipshapes, sizeof(vec4), MAX_COMMANDS);
+    dynamic_buffer_init(r, &r->commands.float_data, sizeof(float), MAX_DRAWDATA);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -1035,7 +1075,7 @@ struct onedraw* od_init(const onedraw_def* def)
     {
         .label = WGPU_STRING_VIEW("indirect_draw_params"),
         .mappedAtCreation = false,
-        .size = sizeof(indirect_params),
+        .size = sizeof(gpu_indirect_params),
         .usage = WGPUBufferUsage_Storage
     });
     assert_msg(r->tiles.indirect_draw_params != NULL, "failed to indirect draw params buffer");
@@ -1177,6 +1217,11 @@ float od_get_gputime(struct onedraw* r)
 //----------------------------------------------------------------------------------------------------------------------------
 void od_terminate(struct onedraw* r)
 {
+    dynamic_buffer_terminate(r, &r->commands.aabb);
+    dynamic_buffer_terminate(r, &r->commands.clipshapes);
+    dynamic_buffer_terminate(r, &r->commands.colors);
+    dynamic_buffer_terminate(r, &r->commands.draw_args);
+    dynamic_buffer_terminate(r, &r->commands.float_data);
     SAFE_RELEASE(r->atlas.sampler, wgpuSamplerRelease);
     SAFE_RELEASE(r->atlas.view, wgpuTextureViewRelease);
     SAFE_RELEASE(r->atlas.texture, wgpuTextureRelease);
