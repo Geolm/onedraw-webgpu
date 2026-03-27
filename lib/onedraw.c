@@ -1255,6 +1255,20 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 {
     assert_msg(r->commands.group_aabb == NULL, "begin/end group pair mismatch");
 
+    // global gpu args
+    gpu_draw_args* args = (gpu_draw_args*) r->commands.draw_args.cpu_buffer;
+    *args = (gpu_draw_args)
+    {
+        .aa_width = VEC2_SQR2,
+        .clear_color = r->rasterizer.clear_color,
+        .max_nodes = MAX_NODES_COUNT,
+        .num_commands = r->commands.list.num_elements,
+        .num_tile_width = r->tiles.num_width,
+        .num_tile_height = r->tiles.num_height,
+        .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
+        .srgb_backbuffer = r->rasterizer.srgb_backbuffer ? 1U : 0U
+    };
+
     // upload storage buffers to gpu
     uint32_t buffer_index = r->stats.frame_index % BUFFER_FRAME_COUNT;
     dynamic_buffer_upload(r->queue, &r->commands.aabb, buffer_index);
@@ -1393,9 +1407,8 @@ void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thick
     }
 
     quantized_aabb aabb = quantized_aabb_make(center.x - max_radius, center.y - max_radius, center.x + max_radius, center.y + max_radius);
-    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
-    
     merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
