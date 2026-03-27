@@ -54,6 +54,7 @@
 #define MAX_NODES_COUNT (1U<<22)
 #define MAX_COMMANDS (1U<<16)
 #define MAX_DRAWDATA (MAX_COMMANDS*4)
+#define MAX_CLIPS (256)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -77,6 +78,23 @@
         TYPE* _ptr = (TYPE*)((db)->cpu_buffer);                        \
         _ptr[(db)->num_elements++] = (VALUE);                          \
     } while (0)
+
+#define LAST_CLIP_INDEX (r->commands.clipshapes.num_elements-1)
+
+static inline uint32_t min_u32(uint32_t a, uint32_t b) {return a < b ? a : b;}
+static inline uint32_t max_u32(uint32_t a, uint32_t b) {return a > b ? a : b;}
+static inline float min_f32(float a, float b) {return a < b ? a : b;}
+static inline float max_f32(float a, float b) {return a > b ? a : b;}
+
+#define OD_MIN(a, b) _Generic((a), \
+    uint32_t: min_u32,          \
+    float:    min_f32           \
+)(a, b)
+
+#define OD_MAX(a, b) _Generic((a), \
+    uint32_t: max_u32,          \
+    float:    max_f32           \
+)(a, b)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Private structures
@@ -250,6 +268,31 @@ typedef struct gpu_indirect_params
     uint32_t first_instance;
 } gpu_indirect_params;
 
+enum primitive_fillmode
+{
+    fill_solid = 0,
+    fill_outline = 1,
+    fill_hollow = 2,
+    fill_gradient = 3
+};
+
+enum command_type
+{
+    primitive_char = 0,
+    primitive_aabox = 1,
+    primitive_oriented_box = 2,
+    primitive_disc = 3,
+    primitive_triangle = 4,
+    primitive_ellipse = 5,
+    primitive_pie = 6,
+    primitive_arc = 7,
+    primitive_blurred_box = 8,
+    primitive_quad = 9,
+    primitive_oriented_quad = 10,
+    
+    begin_group = 32,
+    end_group = 33
+};
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // private functions
@@ -395,6 +438,69 @@ static inline float bitcast_u32_to_float(uint32_t value)
     c.u = value;
     return c.f;
 }
+
+//----------------------------------------------------------------------------------------------------------------------------
+static inline gpu_draw_command gpu_draw_command_make(uint32_t data_index, uint8_t extra, uint8_t clip_index,
+                                                     enum primitive_fillmode fillmode, enum command_type type)
+{
+    gpu_draw_command cmd;
+
+    cmd.data_index = data_index;
+    cmd.flags =
+          (uint32_t)extra
+        | ((uint32_t)clip_index << 8)
+        | ((uint32_t)fillmode   << 16)
+        | ((uint32_t)type       << 24);
+
+    return cmd;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+static inline quantized_aabb quantized_aabb_make(float min_x, float min_y, float max_x, float max_y)
+{
+    min_x = OD_MAX(min_x, 0.0f);
+    min_y = OD_MAX(min_y, 0.0f);
+    max_x = OD_MAX(max_x, 0.0f);
+    max_y = OD_MAX(max_y, 0.0f);
+
+    const float inv_tile = 1.0f / (float)TILE_SIZE;
+    float tmin_x = min_x * inv_tile;
+    float tmin_y = min_y * inv_tile;
+    float tmax_x = max_x * inv_tile;
+    float tmax_y = max_y * inv_tile;
+
+    uint32_t qmin_x = (uint32_t)floorf(tmin_x);
+    uint32_t qmin_y = (uint32_t)floorf(tmin_y);
+    uint32_t qmax_x = (uint32_t)ceilf(tmax_x);
+    uint32_t qmax_y = (uint32_t)ceilf(tmax_y);
+
+    qmin_x = OD_MIN(qmin_x, (uint32_t)UINT8_MAX);
+    qmin_y = OD_MIN(qmin_y, (uint32_t)UINT8_MAX);
+    qmax_x = OD_MIN(qmax_x, (uint32_t)UINT8_MAX);
+    qmax_y = OD_MIN(qmax_y, (uint32_t)UINT8_MAX);
+
+    return  (qmin_x) | (qmin_y << 8) | (qmax_x << 16) | (qmax_y << 24);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+static inline void merge_quantized_aabb(quantized_aabb* merge, const quantized_aabb* other)
+{
+    if (merge != NULL)
+    {
+        uint32_t m = *merge;
+        uint32_t o = *other;
+
+        uint32_t min_x = OD_MIN(m & 0xFFu,        o & 0xFFu);
+        uint32_t min_y = OD_MIN((m >> 8) & 0xFFu, (o >> 8) & 0xFFu);
+        uint32_t max_x = OD_MAX((m >> 16) & 0xFFu, (o >> 16) & 0xFFu);
+        uint32_t max_y = OD_MAX((m >> 24) & 0xFFu, (o >> 24) & 0xFFu);
+
+        *merge = (quantized_aabb)(min_x | (min_y << 8) | (max_x << 16) | (max_y << 24));
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+static inline quantized_aabb invalid_quantized_aabb() {return (quantized_aabb) (0x0000ffff);}
 
 //----------------------------------------------------------------------------------------------------------------------------
 void od_log(struct onedraw* r, const char* string, ...)
@@ -1169,6 +1275,13 @@ void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 void od_begin_frame(struct onedraw* r)
 {
     r->stats.frame_index++;
+    r->commands.aabb.num_elements = 0;
+    r->commands.clipshapes.num_elements = 0;
+    r->commands.colors.num_elements = 0;
+    r->commands.draw_args.num_elements = 0;
+    r->commands.float_data.num_elements = 0;
+    vec4 no_clip = (vec4) {.x = 0.f, .y = 0.f, .z = (float)r->rasterizer.width, .w = (float)r->rasterizer.height};
+    DB_PUSH(&r->commands.clipshapes, vec4, no_clip);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -1266,4 +1379,57 @@ void od_set_clear_color(struct onedraw* r, draw_color srgb_color)
         r->rasterizer.clear_color.z = b8;
         r->rasterizer.clear_color.w = a8;
     }
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thickness, enum primitive_fillmode fillmode,
+                       draw_color primary_color, draw_color secondary_color)
+{
+    if ((r->commands.float_data.num_elements + 4 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    thickness *= .5f;
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_disc);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, primary_color);
+
+    float max_radius = radius + r->rasterizer.aa_width + r->rasterizer.outline_width;
+
+    DB_PUSH(&r->commands.float_data, float, center.x);
+    DB_PUSH(&r->commands.float_data, float, center.y);
+    DB_PUSH(&r->commands.float_data, float, radius);
+
+    if (fillmode == fill_hollow)
+    {
+        max_radius += thickness;
+        DB_PUSH(&r->commands.float_data, float, thickness);
+    }
+    else if (fillmode == fill_gradient)
+    {
+        DB_PUSH(&r->commands.float_data, float, bitcast_u32_to_float(secondary_color));
+    }
+
+    quantized_aabb aabb = quantized_aabb_make(center.x - max_radius, center.y - max_radius, center.x + max_radius, center.y + max_radius);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+    
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_ring(struct onedraw* r, float cx, float cy, float radius, float thickness, draw_color color)
+{
+    private_draw_disc(r, vec2_set(cx, cy), radius, thickness, fill_hollow, color, 0);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_disc(struct onedraw* r, float cx, float cy, float radius, draw_color color)
+{
+    private_draw_disc(r, vec2_set(cx, cy), radius, 0.f, fill_solid, color, 0);
 }
