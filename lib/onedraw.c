@@ -49,7 +49,7 @@
 #define VEC2_PI (3.14159265f)
 #define TESSELATION_STACK_MAX (1024U)
 #define COLINEAR_THRESHOLD (.1f)
-#define FRAME_COUNT (3)
+#define BUFFER_FRAME_COUNT (3)
 #define TILE_SIZE (16)
 #define MAX_NODES_COUNT (1U<<22)
 #define MAX_COMMANDS (1U<<16)
@@ -106,7 +106,7 @@ typedef enum sdf_operator {op_additive, op_subtractive} sdf_operator;
 
 typedef struct dynamic_buffer
 {
-    WGPUBuffer buffers[FRAME_COUNT];
+    WGPUBuffer buffers[BUFFER_FRAME_COUNT];
     size_t element_size;
     size_t num_elements;
     size_t num_elements_max;
@@ -192,18 +192,6 @@ struct onedraw
         od_font desc;
     } font;
 
-    // screenshot service
-    struct
-    {
-        WGPUTexture texture;
-        void* out_pixels;
-        uint32_t region_x, region_y;
-        uint32_t region_width, region_height;
-        bool show_region;
-        bool capture_image;
-        bool allocate_resources;
-    } screenshot;
-
     // stats
     struct
     {
@@ -216,7 +204,7 @@ struct onedraw
     {
         WGPUBindGroup rasterizer_bindgroup;
         WGPUBindGroup binning_bindgroup;
-        WGPUBindGroup frame_bindgroup[FRAME_COUNT];
+        WGPUBindGroup frame_bindgroup[BUFFER_FRAME_COUNT];
         WGPUBindGroupLayout rasterizer_layout;
         WGPUBindGroupLayout binning_layout;
         WGPUBindGroupLayout frame_layout;
@@ -524,7 +512,7 @@ void dynamic_buffer_init(struct onedraw* r, dynamic_buffer* b, size_t element_si
     b->num_elements_max = num_elements_max;
 
     size_t alloc_size = element_size * num_elements_max;
-    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    for(uint32_t i=0; i<BUFFER_FRAME_COUNT; ++i)
     {
         b->buffers[i] = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
         {
@@ -538,9 +526,17 @@ void dynamic_buffer_init(struct onedraw* r, dynamic_buffer* b, size_t element_si
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+void dynamic_buffer_upload(WGPUQueue queue, dynamic_buffer* b, uint32_t index)
+{
+    assert(index < BUFFER_FRAME_COUNT);
+    if (b->num_elements > 0)
+        wgpuQueueWriteBuffer(queue, b->buffers[index], 0, b->cpu_buffer, b->num_elements * b->element_size);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
 void dynamic_buffer_terminate(struct onedraw* r, dynamic_buffer* b)
 {
-    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    for(uint32_t i=0; i<BUFFER_FRAME_COUNT; ++i)
         SAFE_RELEASE(b->buffers[i], wgpuBufferRelease);
     
     r->mem_interface.free_fn(b->cpu_buffer, r->mem_interface.user);
@@ -819,7 +815,7 @@ void build_bind_groups(struct onedraw* r)
     });
     assert_msg(r->binding.binning_bindgroup != NULL, "cannot create rasterizer binding group");
 
-    for(uint32_t i=0; i<FRAME_COUNT; ++i)
+    for(uint32_t i=0; i<BUFFER_FRAME_COUNT; ++i)
     {
         WGPUBindGroupEntry frame_entries[] = 
         {
@@ -1055,14 +1051,12 @@ void build_font(struct onedraw* r)
     {
         .size = gpu_font_size,
         .mappedAtCreation = true,
-        .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc,
+        .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
         .label = WGPU_STRING_VIEW("gpu_font")
     });
 
     assert_msg(r->font.glyphs != NULL, "can create font description gpu buffer");
-    void* mapping = wgpuBufferGetMappedRange(r->font.glyphs, 0, gpu_font_size);
-    memcpy(mapping, cpu_buffer, gpu_font_size);
-    wgpuBufferUnmap(r->font.glyphs);
+    wgpuQueueWriteBuffer(r->queue, r->font.glyphs, 0, cpu_buffer, gpu_font_size);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -1208,34 +1202,6 @@ void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_i
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-void od_set_capture_region(struct onedraw* r, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
-{
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(x);
-    UNUSED_VARIABLE(y);
-    UNUSED_VARIABLE(width);
-    UNUSED_VARIABLE(height);
-    assert_msg(0, "not yet implemented");
-}
-
-//-----------------------------------------------------------------------------------------------------------------------------
-void od_get_capture_region_dimensions(struct onedraw *r, uint32_t* width, uint32_t* height)
-{
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(width);
-    UNUSED_VARIABLE(height);
-    assert_msg(0, "not yet implemented");
-}
-
-//-----------------------------------------------------------------------------------------------------------------------------
-void od_take_screenshot(struct onedraw* r, void* out_pixels)
-{
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(out_pixels);
-    assert_msg(0, "not yet implemented");
-}
-
-//-----------------------------------------------------------------------------------------------------------------------------
 void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 {
     if (width != r->rasterizer.width || height != r->rasterizer.height)
@@ -1265,8 +1231,6 @@ void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
         });
 
         od_log(r, "%ux%u tiles", r->tiles.num_width, r->tiles.num_height);
-
-        // TODO : screenshot resources
     }
     
 }
@@ -1280,6 +1244,8 @@ void od_begin_frame(struct onedraw* r)
     r->commands.colors.num_elements = 0;
     r->commands.draw_args.num_elements = 0;
     r->commands.float_data.num_elements = 0;
+
+    // push default clip rect
     vec4 no_clip = (vec4) {.x = 0.f, .y = 0.f, .z = (float)r->rasterizer.width, .w = (float)r->rasterizer.height};
     DB_PUSH(&r->commands.clipshapes, vec4, no_clip);
 }
@@ -1287,6 +1253,16 @@ void od_begin_frame(struct onedraw* r)
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 {
+    assert_msg(r->commands.group_aabb == NULL, "begin/end group pair mismatch");
+
+    // upload storage buffers to gpu
+    uint32_t buffer_index = r->stats.frame_index % BUFFER_FRAME_COUNT;
+    dynamic_buffer_upload(r->queue, &r->commands.aabb, buffer_index);
+    dynamic_buffer_upload(r->queue, &r->commands.clipshapes, buffer_index);
+    dynamic_buffer_upload(r->queue, &r->commands.colors, buffer_index);
+    dynamic_buffer_upload(r->queue, &r->commands.float_data, buffer_index);
+    dynamic_buffer_upload(r->queue, &r->commands.draw_args, buffer_index);
+
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
 

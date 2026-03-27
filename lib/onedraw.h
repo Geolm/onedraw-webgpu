@@ -95,7 +95,6 @@ typedef struct onedraw_def
     uint32_t viewport_width;
     uint32_t viewport_height;
     void (*log_func)(const char* string);
-    bool allow_screenshot;
     bool srgb_backbuffer;
 
     struct
@@ -124,7 +123,6 @@ extern "C" {
 //      [viewport_width]
 //      [viewport_height]
 //      [log_func]              pointer to the log function, can be NULL if no log required
-//      [allow_screenshot]      if true buffers are allocated for screenshot
 //      [texture_array]
 //          [width]             width of all textures in the array, if 0 (undefined) the array won't be created
 //          [height]            
@@ -140,23 +138,6 @@ struct onedraw* od_init(const onedraw_def* def);
 //          updating a slice while it’s being sampled by the GPU may cause flickering or corruption.
 //          the user is responsible for synchronizing uploads.
 void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_index);
-
-//-----------------------------------------------------------------------------------------------------------------------------
-// Sets-up the capture region for screenshots
-void od_set_capture_region(struct onedraw* r, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
-
-//-----------------------------------------------------------------------------------------------------------------------------
-// Gets the capture region width and height
-void od_get_capture_region_dimensions(struct onedraw *r, uint32_t* width, uint32_t* height);
-
-//-----------------------------------------------------------------------------------------------------------------------------
-// Makes the renderer copy the framebuffer into a cpu buffer when calling od_end_frame()
-// This function must be called before between begin_frame/end_frame.
-//      [out_pixels]            buffer of size (width*height*4), must be valid until od_end_frame() is called
-// 
-// Warning : the MTK::View has to have the flag framebufferOnly = FALSE;
-//           by default GLFW the flag is set false *but* sokol_app set it to true (it's a crash in that case)
-void od_take_screenshot(struct onedraw* r, void* out_pixels);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Resizes the renderer output dimensions (call this when the window size changes)
