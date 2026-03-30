@@ -148,7 +148,6 @@ struct onedraw
         WGPUComputePipeline binning_pso;
         WGPUComputePipeline write_indirect_buffer_pso;
         WGPUBuffer counters;
-        WGPUBuffer indirect_arg;
         WGPUBuffer indices;
         WGPUBuffer nodes;
         WGPUBuffer indirect_draw_params;
@@ -169,8 +168,8 @@ struct onedraw
         float aa_width;
         sdf_operator group_op;
         float outline_width;
-        bool srgb_backbuffer;
-        bool clear_backbuffer;
+        bool srgb_rendertarget;
+        bool clear_rendertarget;
     } rasterizer;
 
     struct 
@@ -232,7 +231,7 @@ typedef struct gpu_draw_args
     uint32_t num_tile_height;
     uint32_t max_nodes;
     float aa_width;
-    uint32_t srgb_backbuffer;
+    uint32_t srgb_rendertarget;
 } gpu_draw_args;
 
 typedef struct gpu_draw_command 
@@ -906,7 +905,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
 
         .primitive = 
         {
-            .topology = WGPUPrimitiveTopology_TriangleList,
+            .topology = WGPUPrimitiveTopology_TriangleStrip,
             .frontFace = WGPUFrontFace_CCW,
             .cullMode = WGPUCullMode_None
         },
@@ -1082,7 +1081,6 @@ void build_font(struct onedraw* r)
     r->font.glyphs = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
     {
         .size = gpu_font_size,
-        .mappedAtCreation = true,
         .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst,
         .label = WGPU_STRING_VIEW("gpu_font")
     });
@@ -1177,9 +1175,9 @@ struct onedraw* od_init(const onedraw_def* def)
     r->mem_interface = mem_interface;
     r->custom_log = def->log_func;
     r->device = def->device;
-    r->rasterizer.srgb_backbuffer = def->srgb_backbuffer;
+    r->rasterizer.srgb_rendertarget = def->srgb_rendertarget;
     r->rasterizer.aa_width = VEC2_SQR2;
-    r->rasterizer.clear_backbuffer = true;
+    r->rasterizer.clear_rendertarget = def->clear_rendertarget;
     r->rasterizer.clear_color = (vec4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
     r->queue = wgpuDeviceGetQueue(r->device);
     assert_msg(r->queue != NULL, "cannot create queue from device");
@@ -1298,7 +1296,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
         .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
-        .srgb_backbuffer = r->rasterizer.srgb_backbuffer ? 1U : 0U
+        .srgb_rendertarget = r->rasterizer.srgb_rendertarget ? 1U : 0U
     };
 
     // upload storage buffers to gpu
@@ -1308,8 +1306,6 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     dynamic_buffer_upload(r->queue, &r->commands.colors, buffer_index);
     dynamic_buffer_upload(r->queue, &r->commands.float_data, buffer_index);
     dynamic_buffer_upload(r->queue, &r->commands.draw_args, buffer_index);
-
-    
 
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
@@ -1350,23 +1346,36 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         wgpuComputePassEncoderRelease(pass);
     }
 
-    WGPURenderPassColorAttachment color_attachment = {0};
-    color_attachment.view = target_view;
-    color_attachment.resolveTarget = NULL;
-    color_attachment.loadOp = WGPULoadOp_Clear;
-    color_attachment.storeOp = WGPUStoreOp_Store;
-    color_attachment.clearValue = (WGPUColor){r->rasterizer.clear_color.x, r->rasterizer.clear_color.y, r->rasterizer.clear_color.z, r->rasterizer.clear_color.w};
-    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    // rasterization pass
+    WGPURenderPassColorAttachment color_attachment = 
+    {
+        .view = target_view,
+        .resolveTarget = NULL,
+        .loadOp = r->rasterizer.clear_rendertarget ? WGPULoadOp_Clear : WGPULoadOp_Load,
+        .storeOp = WGPUStoreOp_Store,
+        .clearValue = (WGPUColor){r->rasterizer.clear_color.x, r->rasterizer.clear_color.y, r->rasterizer.clear_color.z, r->rasterizer.clear_color.w},
+        .depthSlice = WGPU_DEPTH_SLICE_UNDEFINED
+    };
 
-    WGPURenderPassDescriptor render_pass_desc = {0};
-    render_pass_desc.colorAttachmentCount = 1;
-    render_pass_desc.colorAttachments = &color_attachment;
-    render_pass_desc.depthStencilAttachment = NULL;
+    WGPURenderPassDescriptor render_pass_desc = 
+    {
+        .colorAttachmentCount = 1,
+        .colorAttachments = &color_attachment,
+        .depthStencilAttachment = NULL,
+        .label = WGPU_STRING_VIEW("rasterization_pass")
+    };
 
+    
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
+
+    wgpuRenderPassEncoderSetPipeline(pass, r->rasterizer.pso);
+    wgpuRenderPassEncoderSetBindGroup(pass, 0, r->binding.rasterizer_bindgroup, 0, NULL);
+    wgpuRenderPassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
+    wgpuRenderPassEncoderDrawIndirect(pass, r->tiles.indirect_draw_params, 0);
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
+    
 
     WGPUCommandBufferDescriptor cmd_buffer_desc = {0};
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
@@ -1425,7 +1434,7 @@ void od_set_clear_color(struct onedraw* r, draw_color srgb_color)
     float b8 = (float)((srgb_color >> 16) & 0xFF) / 255.f;
     float a8 = (float)((srgb_color >> 24) & 0xFF) / 255.f;
 
-    if (r->rasterizer.srgb_backbuffer)
+    if (r->rasterizer.srgb_rendertarget)
     {
         r->rasterizer.clear_color.x = srgb_to_linear(r8);
         r->rasterizer.clear_color.y = srgb_to_linear(g8);

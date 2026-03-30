@@ -24,7 +24,8 @@ void init(void)
         .device = wgpu.device,
         .viewport_width = wgpu.surface_cfg.width,
         .viewport_height = wgpu.surface_cfg.height,
-        .srgb_backbuffer = true,
+        .srgb_rendertarget = true,
+        .clear_rendertarget = true,
         .surface_format = wgpu.surface_cfg.format
     });
 

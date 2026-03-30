@@ -95,7 +95,8 @@ typedef struct onedraw_def
     uint32_t viewport_width;
     uint32_t viewport_height;
     void (*log_func)(const char* string);
-    bool srgb_backbuffer;
+    bool srgb_rendertarget;
+    bool clear_rendertarget;
 
     struct
     {
