@@ -511,6 +511,18 @@ fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f3
 // Compute Shaders
 // ---------------------------------------------------------------------------------------------------------------------------
 
+@compute @workgroup_size(64)
+fn clear_heads(@builtin(global_invocation_id) global_id: vec3<u32>)
+{
+    let i = global_id.x;
+    let num_tiles = g_draw_args.num_tile_width * g_draw_args.num_tile_height;
+
+    if (i < num_tiles)
+    {
+        g_tile_heads[i] = 0xffffffffu;
+    }
+}
+
 @compute @workgroup_size(16, 16, 1)
 fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
 {
@@ -521,7 +533,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
         return;
     }
 
-    let tile_index = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;
+    let tile_index:u32 = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;
     
     var current_head = INVALID_INDEX; 
 

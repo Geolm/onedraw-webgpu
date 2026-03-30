@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 25735;
+static const size_t binning_shader_size = 26019;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -712,6 +712,18 @@ static const char binning_shader[] =
     "// Compute Shaders\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "\n"
+    "@compute @workgroup_size(64)\n"
+    "fn clear_heads(@builtin(global_invocation_id) global_id: vec3<u32>)\n"
+    "{\n"
+    "    let i = global_id.x;\n"
+    "    let num_tiles = g_draw_args.num_tile_width * g_draw_args.num_tile_height;\n"
+    "\n"
+    "    if (i < num_tiles)\n"
+    "    {\n"
+    "        g_tile_heads[i] = 0xffffffffu;\n"
+    "    }\n"
+    "}\n"
+    "\n"
     "@compute @workgroup_size(16, 16, 1)\n"
     "fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)\n"
     "{\n"
@@ -722,7 +734,7 @@ static const char binning_shader[] =
     "        return;\n"
     "    }\n"
     "\n"
-    "    let tile_index = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;\n"
+    "    let tile_index:u32 = tile_xy.y * g_draw_args.num_tile_width + tile_xy.x;\n"
     "    \n"
     "    var current_head = INVALID_INDEX; \n"
     "\n"

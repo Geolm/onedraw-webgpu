@@ -143,7 +143,8 @@ struct onedraw
     // tile binning
     struct 
     {
-        WGPUBuffer heads; 
+        WGPUBuffer heads;
+        WGPUComputePipeline clear_pso;
         WGPUComputePipeline binning_pso;
         WGPUComputePipeline write_indirect_buffer_pso;
         WGPUBuffer counters;
@@ -945,6 +946,20 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .compute = 
         {
             .module = shader,
+            .entryPoint = WGPU_STRING_VIEW("clear_heads"),
+            .constants = NULL
+        }
+    };
+
+    r->tiles.clear_pso = wgpuDeviceCreateComputePipeline(r->device, &compute_pipeline_desc);
+    assert_msg(r->tiles.clear_pso != NULL, "can't create binning pso");
+
+    compute_pipeline_desc = (WGPUComputePipelineDescriptor)
+    {
+        .layout = layout,
+        .compute = 
+        {
+            .module = shader,
             .entryPoint = WGPU_STRING_VIEW("tile_bin"),
             .constants = NULL
         }
@@ -1175,7 +1190,7 @@ struct onedraw* od_init(const onedraw_def* def)
         .label = WGPU_STRING_VIEW("tile_counters"),
         .mappedAtCreation = false,
         .size = sizeof(uint32_t) * 2,
-        .usage = WGPUBufferUsage_Storage
+        .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst
     });
     assert_msg(r->tiles.counters != NULL, "failed to create tile counters buffer");
     
@@ -1193,7 +1208,7 @@ struct onedraw* od_init(const onedraw_def* def)
         .label = WGPU_STRING_VIEW("indirect_draw_params"),
         .mappedAtCreation = false,
         .size = sizeof(gpu_indirect_params),
-        .usage = WGPUBufferUsage_Storage
+        .usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst | WGPUBufferUsage_Indirect
     });
     assert_msg(r->tiles.indirect_draw_params != NULL, "failed to indirect draw params buffer");
 
@@ -1294,8 +1309,24 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     dynamic_buffer_upload(r->queue, &r->commands.float_data, buffer_index);
     dynamic_buffer_upload(r->queue, &r->commands.draw_args, buffer_index);
 
+    
+
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
+
+    // clear counter
+    wgpuCommandEncoderClearBuffer(encoder, r->tiles.counters, 0, sizeof(uint32_t) * 2);
+
+    // clear heads pass
+    {
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        wgpuComputePassEncoderSetPipeline(pass, r->tiles.clear_pso);
+        wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
+        wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
+        wgpuComputePassEncoderDispatchWorkgroups(pass, r->tiles.num_width * r->tiles.num_height, 1, 1);
+        wgpuComputePassEncoderEnd(pass);
+        wgpuComputePassEncoderRelease(pass);
+    }
 
     // binning pass
     {
