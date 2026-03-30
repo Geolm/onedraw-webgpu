@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 23646;
+static const size_t rasterizer_shader_size = 24114;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -29,13 +29,13 @@ static const char rasterizer_shader[] =
     "\n"
     "struct draw_args \n"
     "{\n"
+    "    clear_color: vec4<f32>,\n"
+    "    screen_div: vec2<f32>,\n"
     "    num_commands: u32,\n"
     "    num_tile_width: u32,\n"
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
-    "    screen_div: vec2<f32>,\n"
     "    aa_width: f32,\n"
-    "    clear_color: vec4<f32>,\n"
     "    srgb_backbuffer: u32\n"
     "};\n"
     "\n"
@@ -89,6 +89,21 @@ static const char rasterizer_shader[] =
     "fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}\n"
     "fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}\n"
     "\n"
+    "\n"
+    "/*\n"
+    "\n"
+    "//-----------------------------------------------------------------------------\n"
+    "// based on https://developer.nvidia.com/gpugems/gpugems3/part-iv-image-effects/chapter-23-high-speed-screen-particles\n"
+    "// we also use a specific blend equation\n"
+    "half4 accumulate_color(half4 color, half4 backbuffer)\n"
+    "{\n"
+    "    half4 output;\n"
+    "    output.rgb = (color.rgb * color.a) + (backbuffer.rgb * (1.f - color.a));\n"
+    "    output.a = backbuffer.a * (1.f - color.a);\n"
+    "    return output;\n"
+    "}\n"
+    "\n"
+    "*/\n"
     "\n"
     "fn accumulate_color(color: vec4<f32>, backbuffer: vec4<f32>) -> vec4<f32> \n"
     "{\n"

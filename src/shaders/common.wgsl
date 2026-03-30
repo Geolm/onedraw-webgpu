@@ -22,13 +22,13 @@ struct counters
 
 struct draw_args 
 {
+    clear_color: vec4<f32>,
+    screen_div: vec2<f32>,
     num_commands: u32,
     num_tile_width: u32,
     num_tile_height: u32,
     max_nodes: u32,
-    screen_div: vec2<f32>,
     aa_width: f32,
-    clear_color: vec4<f32>,
     srgb_backbuffer: u32
 };
 
@@ -82,6 +82,21 @@ fn get_type(cmd: draw_command) -> u32 {return (cmd.flags >> 24u) & 0xFFu;}
 fn get_command_index(n : tile_node) -> u32 {return n.command_index & 0xFFFFu;}
 fn get_command_type(n : tile_node) -> u32 {return (n.command_index >> 16u) & 0xFFu;}
 
+
+/*
+
+//-----------------------------------------------------------------------------
+// based on https://developer.nvidia.com/gpugems/gpugems3/part-iv-image-effects/chapter-23-high-speed-screen-particles
+// we also use a specific blend equation
+half4 accumulate_color(half4 color, half4 backbuffer)
+{
+    half4 output;
+    output.rgb = (color.rgb * color.a) + (backbuffer.rgb * (1.f - color.a));
+    output.a = backbuffer.a * (1.f - color.a);
+    return output;
+}
+
+*/
 
 fn accumulate_color(color: vec4<f32>, backbuffer: vec4<f32>) -> vec4<f32> 
 {

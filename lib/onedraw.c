@@ -224,13 +224,13 @@ typedef struct cubic_bezier {vec2 c0, c1, c2, c3;} cubic_bezier;
 // Warning : the gpu structures must be in sync with the one in common.wgsl
 typedef struct gpu_draw_args
 {
+    vec4 clear_color;
+    vec2 screen_div;
     uint32_t num_commands;
     uint32_t num_tile_width;
     uint32_t num_tile_height;
     uint32_t max_nodes;
-    vec2 screen_div;
     float aa_width;
-    vec4 clear_color;
     uint32_t srgb_backbuffer;
 } gpu_draw_args;
 
@@ -861,9 +861,26 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .bindGroupLayouts = (WGPUBindGroupLayout[]) {r->binding.rasterizer_layout, r->binding.frame_layout}
     });
 
+    WGPUBlendState alpha_blend =
+    {
+        .color = (WGPUBlendComponent)
+        {
+            .operation = WGPUBlendOperation_Add,
+            .srcFactor = WGPUBlendFactor_SrcAlpha,
+            .dstFactor = WGPUBlendFactor_OneMinusSrcAlpha,
+        },
+        .alpha = (WGPUBlendComponent)
+        {
+            .operation = WGPUBlendOperation_Add,
+            .srcFactor = WGPUBlendFactor_One,
+            .dstFactor = WGPUBlendFactor_OneMinusSrcAlpha,
+        },
+    };
+
     WGPUColorTargetState color_target = 
     {
         .format = surface_format,
+        .blend = &alpha_blend,
         .writeMask = WGPUColorWriteMask_All
     };
 
@@ -894,7 +911,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         },
 
         .fragment = &fragment,
-        .multisample = {.count = 1, .mask = ~0u}
+        .multisample = {.count = 1, .mask = ~0u},
     };
 
     r->rasterizer.pso = wgpuDeviceCreateRenderPipeline(r->device, &render_pipeline_desc);
@@ -1279,6 +1296,28 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
+
+    // binning pass
+    {
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        wgpuComputePassEncoderSetPipeline(pass, r->tiles.binning_pso);
+        wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
+        wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
+        wgpuComputePassEncoderDispatchWorkgroups(pass, r->tiles.num_width, r->tiles.num_height, 1);
+        wgpuComputePassEncoderEnd(pass);
+        wgpuComputePassEncoderRelease(pass);
+    }
+
+    // write indirect params pass
+    {
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        wgpuComputePassEncoderSetPipeline(pass, r->tiles.write_indirect_buffer_pso);
+        wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
+        wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
+        wgpuComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1);
+        wgpuComputePassEncoderEnd(pass);
+        wgpuComputePassEncoderRelease(pass);
+    }
 
     WGPURenderPassColorAttachment color_attachment = {0};
     color_attachment.view = target_view;
