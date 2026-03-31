@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24747;
+static const size_t rasterizer_shader_size = 24699;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -379,12 +379,10 @@ static const char rasterizer_shader[] =
     "    let height = length(b - a);\n"
     "    let axis = (b - a) / height;\n"
     "    let pos_translated = position - (a + b) * 0.5;\n"
-    "    \n"
-    "    let pos_boxspace = vec2<f32>(\n"
-    "        axis.x * pos_translated.x - axis.y * pos_translated.y,\n"
-    "        axis.y * pos_translated.x + axis.x * pos_translated.y\n"
-    "    );\n"
-    "    \n"
+    "\n"
+    "    let rot = mat2x2<f32>(vec2<f32>(axis.x, axis.y),vec2<f32>(-axis.y, axis.x));\n"
+    "    let pos_boxspace = pos_translated * rot;\n"
+    "\n"
     "    return sd_ellipse(pos_boxspace, vec2<f32>(height * 0.5, width * 0.5));\n"
     "}\n"
     "\n"

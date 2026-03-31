@@ -178,12 +178,10 @@ fn sd_oriented_ellipse(position: vec2<f32>, a: vec2<f32>, b: vec2<f32>, width: f
     let height = length(b - a);
     let axis = (b - a) / height;
     let pos_translated = position - (a + b) * 0.5;
-    
-    let pos_boxspace = vec2<f32>(
-        axis.x * pos_translated.x - axis.y * pos_translated.y,
-        axis.y * pos_translated.x + axis.x * pos_translated.y
-    );
-    
+
+    let rot = mat2x2<f32>(vec2<f32>(axis.x, axis.y),vec2<f32>(-axis.y, axis.x));
+    let pos_boxspace = pos_translated * rot;
+
     return sd_ellipse(pos_boxspace, vec2<f32>(height * 0.5, width * 0.5));
 }
 
