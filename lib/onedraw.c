@@ -444,21 +444,10 @@ static inline quantized_aabb quantized_aabb_make(float min_x, float min_y, float
     max_x = OD_MAX(max_x, 0.0f);
     max_y = OD_MAX(max_y, 0.0f);
 
-    const float inv_tile = 1.0f / (float)TILE_SIZE;
-    float tmin_x = min_x * inv_tile;
-    float tmin_y = min_y * inv_tile;
-    float tmax_x = max_x * inv_tile;
-    float tmax_y = max_y * inv_tile;
-
-    uint32_t qmin_x = (uint32_t)floorf(tmin_x);
-    uint32_t qmin_y = (uint32_t)floorf(tmin_y);
-    uint32_t qmax_x = (uint32_t)ceilf(tmax_x);
-    uint32_t qmax_y = (uint32_t)ceilf(tmax_y);
-
-    qmin_x = OD_MIN(qmin_x, (uint32_t)UINT8_MAX);
-    qmin_y = OD_MIN(qmin_y, (uint32_t)UINT8_MAX);
-    qmax_x = OD_MIN(qmax_x, (uint32_t)UINT8_MAX);
-    qmax_y = OD_MIN(qmax_y, (uint32_t)UINT8_MAX);
+    uint32_t qmin_x = OD_MIN((uint32_t)min_x / TILE_SIZE, (uint32_t)UINT8_MAX);
+    uint32_t qmin_y = OD_MIN((uint32_t)min_y / TILE_SIZE, (uint32_t)UINT8_MAX);
+    uint32_t qmax_x = OD_MIN((uint32_t)max_x / TILE_SIZE, (uint32_t)UINT8_MAX);
+    uint32_t qmax_y = OD_MIN((uint32_t)max_y / TILE_SIZE, (uint32_t)UINT8_MAX);
 
     return  (qmin_x) | (qmin_y << 8) | (qmax_x << 16) | (qmax_y << 24);
 }
