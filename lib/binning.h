@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 26019;
+static const size_t binning_shader_size = 26059;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -36,7 +36,7 @@ static const char binning_shader[] =
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
     "    aa_width: f32,\n"
-    "    srgb_backbuffer: u32\n"
+    "    srgb_backbuffer: u32,\n"
     "};\n"
     "\n"
     "struct glyph\n"
@@ -773,7 +773,8 @@ static const char binning_shader[] =
     "        }\n"
     "\n"
     "        // 3. Fine-grained intersection test\n"
-    "        let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);\n"
+    "        //let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);\n"
+    "        let to_be_added:bool = true;\n"
     "\n"
     "        // we traverse in reverse order, so the end comes first\n"
     "        if (cmd_type == BEGIN_GROUP) \n"

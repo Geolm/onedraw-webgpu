@@ -22,8 +22,8 @@ void init(void)
     renderer = od_init( &(onedraw_def)
     {
         .device = wgpu.device,
-        .viewport_width = wgpu.surface_cfg.width,
-        .viewport_height = wgpu.surface_cfg.height,
+        .viewport_width = width,
+        .viewport_height = height,
         .srgb_rendertarget = true,
         .clear_rendertarget = true,
         .surface_format = wgpu.surface_cfg.format
@@ -44,6 +44,7 @@ void frame(void)
     WGPUTextureView frame = wgpuTextureCreateView(surfaceTexture.texture, NULL);
 
     od_begin_frame(renderer);
+    od_draw_disc(renderer, 50.f, 50.f, 25.f, 0xffffffff);
     // od_draw_text(renderer, 0, 0, "Hello world!", 0xffffffff);
     od_end_frame(renderer, frame);
 

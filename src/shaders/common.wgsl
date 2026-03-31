@@ -29,7 +29,7 @@ struct draw_args
     num_tile_height: u32,
     max_nodes: u32,
     aa_width: f32,
-    srgb_backbuffer: u32
+    srgb_backbuffer: u32,
 };
 
 struct glyph

@@ -1234,6 +1234,7 @@ void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_i
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
 {
+    assert(width > 16 && height > 16);
     if (width != r->rasterizer.width || height != r->rasterizer.height)
     {
         od_log(r, "resizing the framebuffer to %dx%d", width, height);
@@ -1274,6 +1275,7 @@ void od_begin_frame(struct onedraw* r)
     r->commands.colors.num_elements = 0;
     r->commands.draw_args.num_elements = 0;
     r->commands.float_data.num_elements = 0;
+    r->commands.list.num_elements = 0;
 
     // push default clip rect
     vec4 no_clip = (vec4) {.x = 0.f, .y = 0.f, .z = (float)r->rasterizer.width, .w = (float)r->rasterizer.height};
@@ -1286,18 +1288,18 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     assert_msg(r->commands.group_aabb == NULL, "begin/end group pair mismatch");
 
     // global gpu args
-    gpu_draw_args* args = (gpu_draw_args*) r->commands.draw_args.cpu_buffer;
-    *args = (gpu_draw_args)
+    gpu_draw_args args =
     {
         .aa_width = VEC2_SQR2,
         .clear_color = r->rasterizer.clear_color,
-        .max_nodes = MAX_NODES_COUNT,
+        .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
         .num_commands = r->commands.list.num_elements,
+
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
-        .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
         .srgb_rendertarget = r->rasterizer.srgb_rendertarget ? 1U : 0U
     };
+    DB_PUSH(&r->commands.draw_args, gpu_draw_args, args);
 
     // upload storage buffers to gpu
     uint32_t buffer_index = r->stats.frame_index % BUFFER_FRAME_COUNT;

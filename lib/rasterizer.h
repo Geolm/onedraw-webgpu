@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24114;
+static const size_t rasterizer_shader_size = 24115;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -36,7 +36,7 @@ static const char rasterizer_shader[] =
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
     "    aa_width: f32,\n"
-    "    srgb_backbuffer: u32\n"
+    "    srgb_backbuffer: u32,\n"
     "};\n"
     "\n"
     "struct glyph\n"
