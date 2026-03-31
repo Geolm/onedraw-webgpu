@@ -366,6 +366,19 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                         }
                         distance -= g_draw_data[data_idx + 5u];
                     }
+                    case PRIMITIVE_ELLIPSE:
+                    {
+                        let p0 = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+                        let p1 = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);
+                        let width = g_draw_data[data_idx + 4u];
+
+                        distance = sd_oriented_ellipse(in.pos.xy, p0, p1, width);
+
+                        if (fillmode == FILL_HOLLOW) 
+                        {
+                            distance = abs(distance) - g_draw_data[data_idx + 5u];;
+                        }
+                    }
                     case PRIMITIVE_AABOX:
                     {
                         let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);

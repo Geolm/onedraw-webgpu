@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24121;
+static const size_t rasterizer_shader_size = 24747;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -566,6 +566,19 @@ static const char rasterizer_shader[] =
     "                            cmd_color = mix(inner_color, cmd_color, h);\n"
     "                        }\n"
     "                        distance -= g_draw_data[data_idx + 5u];\n"
+    "                    }\n"
+    "                    case PRIMITIVE_ELLIPSE:\n"
+    "                    {\n"
+    "                        let p0 = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);\n"
+    "                        let p1 = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);\n"
+    "                        let width = g_draw_data[data_idx + 4u];\n"
+    "\n"
+    "                        distance = sd_oriented_ellipse(in.pos.xy, p0, p1, width);\n"
+    "\n"
+    "                        if (fillmode == FILL_HOLLOW) \n"
+    "                        {\n"
+    "                            distance = abs(distance) - g_draw_data[data_idx + 5u];;\n"
+    "                        }\n"
     "                    }\n"
     "                    case PRIMITIVE_AABOX:\n"
     "                    {\n"
