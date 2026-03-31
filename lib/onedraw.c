@@ -1505,53 +1505,137 @@ void od_draw_disc(struct onedraw* r, float cx, float cy, float radius, draw_colo
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_disc_gradient(struct onedraw* r, float cx, float cy, float radius, draw_color outter_color, draw_color inner_color)
-// {
+void od_draw_disc_gradient(struct onedraw* r, float cx, float cy, float radius, draw_color outter_color, draw_color inner_color)
+{
+    private_draw_disc(r, vec2_set(cx, cy), radius, 0.f, fill_gradient, outter_color, inner_color);
+}
 
-// }
+//----------------------------------------------------------------------------------------------------------------------------
+void private_draw_oriented_box(struct onedraw* r, vec2 p0, vec2 p1, float width, float roundness, float thickness,
+                               enum primitive_fillmode fillmode, draw_color primary_color, draw_color secondary_color)
+{
+    if (vec2_similar(p0, p1, HALF_PIXEL))
+        return;
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_oriented_box(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, draw_color srgb_color)
-// {
+    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-// }
+    thickness *= .5f;
+    float roundness_thickness = (fillmode == fill_hollow) ? thickness : roundness;
+    aabb bb = aabb_from_rounded_obb(p0, p1, width, roundness_thickness + r->rasterizer.aa_width + r->rasterizer.outline_width);
 
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_oriented_box);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, primary_color);
+    DB_PUSH(&r->commands.float_data, float, p0.x);
+    DB_PUSH(&r->commands.float_data, float, p0.y);
+    DB_PUSH(&r->commands.float_data, float, p1.x);
+    DB_PUSH(&r->commands.float_data, float, p1.y);
+    DB_PUSH(&r->commands.float_data, float, width);
+    DB_PUSH(&r->commands.float_data, float, roundness_thickness);
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_oriented_rect(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, float thickness, draw_color srgb_color)
-// {
+    if (fillmode == fill_gradient)
+    {
+        DB_PUSH(&r->commands.float_data, float,bitcast_u32_to_float(secondary_color));
+    }
 
-// }
+    quantized_aabb aabb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_line(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
-// {
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_oriented_box(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, draw_color color)
+{
+    private_draw_oriented_box(r, vec2_set(ax, ay), vec2_set(bx, by), width, roundness, 0.f, fill_solid, color, 0);
+}
 
-// }
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_oriented_rect(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, float thickness, draw_color color)
+{
+    private_draw_oriented_box(r, vec2_set(ax, ay), vec2_set(bx, by), width, roundness, thickness, fill_hollow, color, 0);
+}
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_capsule(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color srgb_color)
-// {
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_line(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
+{
+    private_draw_oriented_box(r, vec2_set(ax, ay), vec2_set(bx, by), width, 0.f, 0.f, fill_solid, srgb_color, 0);
+}
 
-// }
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_capsule(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color srgb_color)
+{
+    // capsule uses a specific sdf (see rasterizer shader) more efficient that oriented box
+    private_draw_oriented_box(r, vec2_set(ax, ay), vec2_set(bx, by), 0.f, radius, 0.f, fill_solid, srgb_color, 0);
+}
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_capsule_gradient(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color primary_color, draw_color secondary_color)
-// {
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_capsule_gradient(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color primary_color, draw_color secondary_color)
+{
+    private_draw_oriented_box(r, vec2_set(ax, ay), vec2_set(bx, by), 0.f, radius, 0.f, fill_gradient, primary_color, secondary_color);
+}
 
-// }
+//----------------------------------------------------------------------------------------------------------------------------
+void private_draw_ellipse(struct onedraw* r, vec2 p0, vec2 p1, float width, float thickness, enum primitive_fillmode fillmode, draw_color srgb_color)
+{
+    if (vec2_similar(p0, p1, HALF_PIXEL))
+        return;
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_ellipse(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
-// {
+    if (width <= HALF_PIXEL)
+    {
+        private_draw_oriented_box(r, p0, p1, 0.f, 0.f, 0.f, fill_solid, srgb_color, 0);
+        return;
+    }
 
-// }
+    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_ellipse_ring(struct onedraw* r, float ax, float ay, float bx, float by, float width, float thickness, draw_color srgb_color)
-// {
+    thickness = float_max(thickness * .5f, 0.f);
+    aabb bb = aabb_from_rounded_obb(p0, p1, width, r->rasterizer.aa_width + r->rasterizer.outline_width + thickness);
 
-// }
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_ellipse);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, p0.x);
+    DB_PUSH(&r->commands.float_data, float, p0.y);
+    DB_PUSH(&r->commands.float_data, float, p1.x);
+    DB_PUSH(&r->commands.float_data, float, p1.y);
+    DB_PUSH(&r->commands.float_data, float, width);
+
+    if (fillmode == fill_hollow)
+    {
+        DB_PUSH(&r->commands.float_data, float, thickness);
+    }
+
+    quantized_aabb aabb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_ellipse(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
+{
+    private_draw_ellipse(r, vec2_set(ax, ay), vec2_set(bx, by), width, 0.f, fill_solid, srgb_color);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_ellipse_ring(struct onedraw* r, float ax, float ay, float bx, float by, float width, float thickness, draw_color srgb_color)
+{
+    private_draw_ellipse(r, vec2_set(ax, ay), vec2_set(bx, by), width, thickness, fill_hollow, srgb_color);
+}
+
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // void od_draw_triangle(struct onedraw* r, const float* vertices, float roundness, draw_color srgb_color)
@@ -1663,14 +1747,129 @@ void od_draw_text(struct onedraw* r, float x, float y, const char* text, draw_co
 // }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// uint32_t od_draw_quadratic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
-// {
+// Breaks the bezier quadratic curve into multiple capsules, using De Casteljau’s algorithm and colinear detection
+uint32_t od_draw_quadratic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
+{
+    quadratic_bezier stack[TESSELATION_STACK_MAX];
+    uint32_t stack_index = 0;
 
-// }
+    const float radius = width * .5f;
+    uint32_t num_capsules = 0;
 
+    stack[stack_index++] = (quadratic_bezier)
+    {
+        .c0 = {control_points[0], control_points[1]},
+        .c1 = {control_points[2], control_points[3]},
+        .c2 = {control_points[4], control_points[5]},
+    };
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// uint32_t od_draw_cubic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
-// {
+    while (stack_index != 0)
+    {
+        quadratic_bezier c = stack[--stack_index];
 
-// }
+        // splits proportionally to segment lengths
+        float d0 = vec2_distance(c.c0, c.c1);
+        float d1 = vec2_distance(c.c1, c.c2);
+        float split = d0 / (d0 + d1);
+
+        vec2 left = vec2_lerp( c.c0, c.c1, split);
+        vec2 right = vec2_lerp(c.c1, c.c2, split);
+        vec2 middle = vec2_lerp(left, right, split);
+        
+        if (is_colinear(c.c0, c.c2, middle, COLINEAR_THRESHOLD))
+        {
+            od_draw_capsule(r, c.c0.x, c.c0.y, c.c2.x, c.c2.y, radius, srgb_color);
+            num_capsules++;
+        }
+        else
+        {
+            if (stack_index + 2 <= TESSELATION_STACK_MAX)
+            {
+                stack[stack_index++] = (quadratic_bezier)
+                {
+                    .c0 = c.c0,
+                    .c1 = left,
+                    .c2 = middle,
+                };
+
+                stack[stack_index++] = (quadratic_bezier)
+                {
+                    .c0 = middle,
+                    .c1 = right,
+                    .c2 = c.c2,
+                };
+            }
+            else
+                return UINT32_MAX;
+        }
+    }
+    return num_capsules;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+uint32_t od_draw_cubic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
+{
+    cubic_bezier stack[TESSELATION_STACK_MAX];
+    uint32_t stack_index = 0;
+
+    const float radius = width * .5f;
+    uint32_t num_capsules = 0;
+
+    stack[stack_index++] = (cubic_bezier)
+    {
+        .c0 = {control_points[0], control_points[1]},
+        .c1 = {control_points[2], control_points[3]},
+        .c2 = {control_points[4], control_points[5]},
+        .c3 = {control_points[6], control_points[7]}
+    };
+
+    while (stack_index != 0)
+    {
+        cubic_bezier c = stack[--stack_index];
+
+        // the halfway point along the control polygon roughly corresponds to halfway along the curve arc length
+        float d0 = vec2_distance(c.c0, c.c1);
+        float d1 = vec2_distance(c.c1, c.c2);
+        float d2 = vec2_distance(c.c2, c.c3);
+        float total = d0 + d1 + d2;
+        float split = (d0 + 0.5f * d1) / total;
+
+        vec2 c01 = vec2_lerp(c.c0, c.c1, split);
+        vec2 c12 = vec2_lerp(c.c1, c.c2, split);
+        vec2 c23 = vec2_lerp(c.c2, c.c3, split);
+        vec2 c01c12 = vec2_lerp(c01, c12, split);
+        vec2 c12c23 = vec2_lerp(c12, c23, split);
+        vec2 middle = vec2_lerp(c01c12, c12c23, split);
+
+        if (is_colinear(c.c0, c.c3, middle, COLINEAR_THRESHOLD))
+        {
+            od_draw_capsule(r, c.c0.x, c.c0.y, c.c2.x, c.c2.y, radius, srgb_color);
+            num_capsules++;
+        }
+        else
+        {
+            if (stack_index + 2 <= TESSELATION_STACK_MAX)
+            {
+                stack[stack_index++] = (cubic_bezier)
+                {
+                    .c0 = c.c0,
+                    .c1 = c01,
+                    .c2 = c01c12,
+                    .c3 = middle
+                };
+
+                stack[stack_index++] = (cubic_bezier)
+                {
+                    .c0 = middle,
+                    .c1 = c12c23,
+                    .c2 = c23,
+                    .c3 = c.c3,
+                };
+            }
+            else
+                return UINT32_MAX;
+        }
+    }
+
+    return num_capsules;
+}
