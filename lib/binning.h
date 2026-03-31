@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 26020;
+static const size_t binning_shader_size = 25989;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -814,7 +814,7 @@ static const char binning_shader[] =
     "@compute @workgroup_size(1, 1, 1)\n"
     "fn write_indirect_args()\n"
     "{\n"
-    "    g_indirect_draw.vertex_count   = 4u; // 4 vertices for a quad/strip\n"
+    "    g_indirect_draw.vertex_count   = 4u;\n"
     "    g_indirect_draw.instance_count = atomicLoad(&g_counters.num_tiles);\n"
     "    g_indirect_draw.first_vertex   = 0u;\n"
     "    g_indirect_draw.first_instance = 0u;\n"

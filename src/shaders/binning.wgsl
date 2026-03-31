@@ -613,7 +613,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
 @compute @workgroup_size(1, 1, 1)
 fn write_indirect_args()
 {
-    g_indirect_draw.vertex_count   = 4u; // 4 vertices for a quad/strip
+    g_indirect_draw.vertex_count   = 4u;
     g_indirect_draw.instance_count = atomicLoad(&g_counters.num_tiles);
     g_indirect_draw.first_vertex   = 0u;
     g_indirect_draw.first_instance = 0u;

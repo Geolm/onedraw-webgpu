@@ -144,7 +144,6 @@ struct onedraw
     struct 
     {
         WGPUBuffer heads;
-        WGPUComputePipeline clear_pso;
         WGPUComputePipeline binning_pso;
         WGPUComputePipeline write_indirect_buffer_pso;
         WGPUBuffer counters;
@@ -933,21 +932,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .label = WGPU_STRING_VIEW("binning")
     });
 
-    WGPUComputePipelineDescriptor compute_pipeline_desc = 
-    {
-        .layout = layout,
-        .compute = 
-        {
-            .module = shader,
-            .entryPoint = WGPU_STRING_VIEW("clear_heads"),
-            .constants = NULL
-        }
-    };
-
-    r->tiles.clear_pso = wgpuDeviceCreateComputePipeline(r->device, &compute_pipeline_desc);
-    assert_msg(r->tiles.clear_pso != NULL, "can't create binning pso");
-
-    compute_pipeline_desc = (WGPUComputePipelineDescriptor)
+    WGPUComputePipelineDescriptor compute_pipeline_desc = (WGPUComputePipelineDescriptor)
     {
         .layout = layout,
         .compute = 
@@ -1310,18 +1295,6 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     // clear counter
     wgpuCommandEncoderClearBuffer(encoder, r->tiles.counters, 0, sizeof(uint32_t) * 2);
 
-    // clear heads pass
-    {
-        WGPUComputePassDescriptor desc = {.label = WGPU_STRING_VIEW("clear_heads pass")};
-        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &desc);
-        wgpuComputePassEncoderSetPipeline(pass, r->tiles.clear_pso);
-        wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
-        wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
-        wgpuComputePassEncoderDispatchWorkgroups(pass, r->tiles.num_width * r->tiles.num_height, 1, 1);
-        wgpuComputePassEncoderEnd(pass);
-        wgpuComputePassEncoderRelease(pass);
-    }
-
     // binning pass
     {
         WGPUComputePassDescriptor desc = {.label = WGPU_STRING_VIEW("binning pass")};
@@ -1418,6 +1391,8 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->tiles.nodes, wgpuBufferRelease);
     SAFE_RELEASE(r->tiles.heads, wgpuBufferRelease);
     SAFE_RELEASE(r->rasterizer.pso, wgpuRenderPipelineRelease);
+    SAFE_RELEASE(r->tiles.binning_pso, wgpuComputePipelineRelease);
+    SAFE_RELEASE(r->tiles.write_indirect_buffer_pso, wgpuComputePipelineRelease);
     r->mem_interface.free_fn(r, r->mem_interface.user);
 }
 
