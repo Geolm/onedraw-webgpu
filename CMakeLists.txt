@@ -104,17 +104,17 @@ if(TARGET build_lib)
     add_dependencies(run_builder builder)
 endif()
 
-# --- Minimal app ---
-add_executable(minimal
+# --- Test app ---
+add_executable(test
     ./lib/onedraw.c
-    ./tests/minimal.c
+    ./tests/test.c
     ./tests/native_webgpu.c
 )
 
-target_link_libraries(minimal glfw)
+target_link_libraries(test glfw)
 
 if(TARGET build_lib)
-    add_dependencies(minimal run_builder)
+    add_dependencies(test run_builder)
 endif()
 
-setup_app(minimal)
+setup_app(test)
