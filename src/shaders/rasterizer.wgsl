@@ -271,6 +271,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
 {
     var output:vec4<f32> = g_draw_args.clear_color;
 
+    /* 
     var node_idx:u32 = g_tile_heads[in.tile_index];
     if (node_idx == INVALID_INDEX)
     {
@@ -301,9 +302,9 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         var cmd_color: vec4<f32> = srgb_to_linear(unpack4x8unorm(g_colors[cmd_idx]));
 
         let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || 
-                             in.pos.x > clip.max_x || in.pos.y > clip.max_y);
+                                in.pos.x > clip.max_x || in.pos.y > clip.max_y);
 
-        if (!clipped)
+        //if (!clipped)
         {
             var distance: f32 = 10.0;
 
@@ -504,5 +505,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         output = linear_to_srgb(output);
     }
 
-    return output;
+    //return output; */
+    return vec4<f32>(1.0, 0.0, 0.0, 1.0);
 }

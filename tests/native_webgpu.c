@@ -154,6 +154,9 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
     WGPUSurfaceCapabilities surface_caps = {};
     wgpuSurfaceGetCapabilities(wgpu->surface, wgpu->adapter, &surface_caps);
 
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
     wgpu->surface_cfg = (WGPUSurfaceConfiguration)
     {
         .device = wgpu->device,
@@ -162,8 +165,8 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
         .viewFormatCount = 1,
         .presentMode = WGPUPresentMode_Fifo,
         .alphaMode = surface_caps.alphaModes[0],
-        .width = 1,
-        .height = 1
+        .width = (uint32_t) width, 
+        .height = (uint32_t) height
     };
 
     wgpu->surface_cfg.viewFormats = &wgpu->surface_cfg.format;

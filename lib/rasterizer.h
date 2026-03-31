@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24115;
+static const size_t rasterizer_shader_size = 24175;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -472,6 +472,7 @@ static const char rasterizer_shader[] =
     "{\n"
     "    var output:vec4<f32> = g_draw_args.clear_color;\n"
     "\n"
+    "    /* \n"
     "    var node_idx:u32 = g_tile_heads[in.tile_index];\n"
     "    if (node_idx == INVALID_INDEX)\n"
     "    {\n"
@@ -502,9 +503,9 @@ static const char rasterizer_shader[] =
     "        var cmd_color: vec4<f32> = srgb_to_linear(unpack4x8unorm(g_colors[cmd_idx]));\n"
     "\n"
     "        let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || \n"
-    "                             in.pos.x > clip.max_x || in.pos.y > clip.max_y);\n"
+    "                                in.pos.x > clip.max_x || in.pos.y > clip.max_y);\n"
     "\n"
-    "        if (!clipped)\n"
+    "        //if (!clipped)\n"
     "        {\n"
     "            var distance: f32 = 10.0;\n"
     "\n"
@@ -705,7 +706,8 @@ static const char rasterizer_shader[] =
     "        output = linear_to_srgb(output);\n"
     "    }\n"
     "\n"
-    "    return output;\n"
+    "    //return output; */\n"
+    "    return vec4<f32>(1.0, 0.0, 0.0, 1.0);\n"
     "}\n"
 ;
 

@@ -1370,6 +1370,8 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     
     WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
 
+    wgpuRenderPassEncoderSetViewport(pass, 0.0, 0.0, (float)r->rasterizer.width, (float)r->rasterizer.height, 0.0, 1.0);
+    wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, r->rasterizer.width, r->rasterizer.height);
     wgpuRenderPassEncoderSetPipeline(pass, r->rasterizer.pso);
     wgpuRenderPassEncoderSetBindGroup(pass, 0, r->binding.rasterizer_bindgroup, 0, NULL);
     wgpuRenderPassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
