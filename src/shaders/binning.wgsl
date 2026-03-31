@@ -572,8 +572,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
         }
 
         // 3. Fine-grained intersection test
-        //let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);
-        let to_be_added:bool = true;
+        let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);
 
         // we traverse in reverse order, so the end comes first
         if (cmd_type == BEGIN_GROUP) 

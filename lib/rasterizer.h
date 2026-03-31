@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24175;
+static const size_t rasterizer_shader_size = 24121;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -471,8 +471,7 @@ static const char rasterizer_shader[] =
     "fn tile_fs(in: vs_out) -> @location(0) vec4<f32> \n"
     "{\n"
     "    var output:vec4<f32> = g_draw_args.clear_color;\n"
-    "\n"
-    "    /* \n"
+    " \n"
     "    var node_idx:u32 = g_tile_heads[in.tile_index];\n"
     "    if (node_idx == INVALID_INDEX)\n"
     "    {\n"
@@ -706,8 +705,7 @@ static const char rasterizer_shader[] =
     "        output = linear_to_srgb(output);\n"
     "    }\n"
     "\n"
-    "    //return output; */\n"
-    "    return vec4<f32>(1.0, 0.0, 0.0, 1.0);\n"
+    "    return output;\n"
     "}\n"
 ;
 

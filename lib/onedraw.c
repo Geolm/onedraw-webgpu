@@ -432,14 +432,8 @@ static inline gpu_draw_command gpu_draw_command_make(uint32_t data_index, uint8_
                                                      enum primitive_fillmode fillmode, enum command_type type)
 {
     gpu_draw_command cmd;
-
     cmd.data_index = data_index;
-    cmd.flags =
-          (uint32_t)extra
-        | ((uint32_t)clip_index << 8)
-        | ((uint32_t)fillmode   << 16)
-        | ((uint32_t)type       << 24);
-
+    cmd.flags = (uint32_t)extra | ((uint32_t)clip_index << 8) | ((uint32_t)fillmode << 16) | ((uint32_t)type << 24);
     return cmd;
 }
 
@@ -478,7 +472,7 @@ static inline void merge_quantized_aabb(quantized_aabb* merge, const quantized_a
         uint32_t m = *merge;
         uint32_t o = *other;
 
-        uint32_t min_x = OD_MIN(m & 0xFFu,        o & 0xFFu);
+        uint32_t min_x = OD_MIN(m & 0xFFu, o & 0xFFu);
         uint32_t min_y = OD_MIN((m >> 8) & 0xFFu, (o >> 8) & 0xFFu);
         uint32_t max_x = OD_MAX((m >> 16) & 0xFFu, (o >> 16) & 0xFFu);
         uint32_t max_y = OD_MAX((m >> 24) & 0xFFu, (o >> 24) & 0xFFu);
@@ -1308,6 +1302,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
     dynamic_buffer_upload(r->queue, &r->commands.colors, buffer_index);
     dynamic_buffer_upload(r->queue, &r->commands.float_data, buffer_index);
     dynamic_buffer_upload(r->queue, &r->commands.draw_args, buffer_index);
+    dynamic_buffer_upload(r->queue, &r->commands.list, buffer_index);
 
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
@@ -1317,7 +1312,8 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     // clear heads pass
     {
-        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        WGPUComputePassDescriptor desc = {.label = WGPU_STRING_VIEW("clear_heads pass")};
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &desc);
         wgpuComputePassEncoderSetPipeline(pass, r->tiles.clear_pso);
         wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
         wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
@@ -1328,7 +1324,8 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     // binning pass
     {
-        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        WGPUComputePassDescriptor desc = {.label = WGPU_STRING_VIEW("binning pass")};
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &desc);
         wgpuComputePassEncoderSetPipeline(pass, r->tiles.binning_pso);
         wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
         wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
@@ -1339,7 +1336,8 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     // write indirect params pass
     {
-        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, NULL);
+        WGPUComputePassDescriptor desc = {.label = WGPU_STRING_VIEW("write_indirect_params pass")};
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &desc);
         wgpuComputePassEncoderSetPipeline(pass, r->tiles.write_indirect_buffer_pso);
         wgpuComputePassEncoderSetBindGroup(pass, 0, r->binding.binning_bindgroup, 0, NULL);
         wgpuComputePassEncoderSetBindGroup(pass, 1, r->binding.frame_bindgroup[buffer_index], 0, NULL);
@@ -1364,7 +1362,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .colorAttachmentCount = 1,
         .colorAttachments = &color_attachment,
         .depthStencilAttachment = NULL,
-        .label = WGPU_STRING_VIEW("rasterization_pass")
+        .label = WGPU_STRING_VIEW("rasterization pass")
     };
 
     
