@@ -44,8 +44,8 @@ void frame(void)
     WGPUTextureView frame = wgpuTextureCreateView(surfaceTexture.texture, NULL);
 
     od_begin_frame(renderer);
-    od_draw_disc(renderer, 500.f, 500.f, 250.f, 0xffffffff);
-    //od_draw_text(renderer, 0, 0, "Hello world!", 0xffffffff);
+    od_draw_disc(renderer, 500.f, 500.f, 250.f, 0xff2434b0);
+    od_draw_text(renderer, 0, 0, "Hello world!", 0xffffffff);
     od_end_frame(renderer, frame);
 
     wgpuSurfacePresent(wgpu.surface);

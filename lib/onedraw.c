@@ -1503,3 +1503,174 @@ void od_draw_disc(struct onedraw* r, float cx, float cy, float radius, draw_colo
 {
     private_draw_disc(r, vec2_set(cx, cy), radius, 0.f, fill_solid, color, 0);
 }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_disc_gradient(struct onedraw* r, float cx, float cy, float radius, draw_color outter_color, draw_color inner_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_oriented_box(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, draw_color srgb_color)
+// {
+
+// }
+
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_oriented_rect(struct onedraw* r, float ax, float ay, float bx, float by, float width, float roundness, float thickness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_line(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_capsule(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_capsule_gradient(struct onedraw* r, float ax, float ay, float bx, float by, float radius, draw_color primary_color, draw_color secondary_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_ellipse(struct onedraw* r, float ax, float ay, float bx, float by, float width, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_ellipse_ring(struct onedraw* r, float ax, float ay, float bx, float by, float width, float thickness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_triangle(struct onedraw* r, const float* vertices, float roundness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_triangle_ring(struct onedraw* r, const float* vertices, float roundness, float thickness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_sector(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_sector_ring(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, float thickness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, float aperture, float radius, float thickness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, float radius, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float half_width, float half_height, float roundness, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_draw_char(struct onedraw* r, float x, float y, char c, draw_color srgb_color)
+{
+    if (c < r->font.desc.first_glyph || c > (r->font.desc.first_glyph + r->font.desc.num_glyphs))
+        return;
+
+    if ((r->commands.float_data.num_elements + 2 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    uint32_t glyph_index = c - r->font.desc.first_glyph;
+    const od_glyph* glyph = &r->font.desc.glyphs[glyph_index];
+    x += glyph->bearing_x;
+    y += glyph->bearing_y + r->font.desc.font_height;
+    float glyph_width = (float)(glyph->x1 - glyph->x0);
+    float glyph_height = (float)(glyph->y1 - glyph->y0);
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) glyph_index, LAST_CLIP_INDEX, fill_solid, primitive_char);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, x);
+    DB_PUSH(&r->commands.float_data, float, y);
+
+    quantized_aabb aabb = quantized_aabb_make(x, y, x + glyph_width, y + glyph_height);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_draw_text(struct onedraw* r, float x, float y, const char* text, draw_color srgb_color)
+{
+    float left = x;
+    for(const char *c = text; *c != 0; c++)
+    {
+        if (*c == '\n')
+        {
+            y += r->font.desc.font_height;
+            x = left;
+        }
+        else if (*c >= r->font.desc.first_glyph && *c <= (r->font.desc.first_glyph + r->font.desc.num_glyphs))
+        {
+            od_draw_char(r, x, y, *c, srgb_color);
+            uint32_t glyph_index = *c - r->font.desc.first_glyph;
+            x += r->font.desc.glyphs[glyph_index].advance_x;
+        }
+        else
+            x += r->font.desc.glyphs['_'- r->font.desc.first_glyph].advance_x * .65f;
+    }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_quad(struct onedraw* r, float x0, float y0, float x1, float y1, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// void od_draw_oriented_quad(struct onedraw* r, float cx, float cy, float width, float height, float angle, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
+// {
+
+// }
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// uint32_t od_draw_quadratic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
+// {
+
+// }
+
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// uint32_t od_draw_cubic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color)
+// {
+
+// }
