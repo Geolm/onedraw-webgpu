@@ -1294,7 +1294,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .clear_color = r->rasterizer.clear_color,
         .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
         .num_commands = r->commands.list.num_elements,
-
+        .max_nodes = MAX_NODES_COUNT,
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
         .srgb_rendertarget = r->rasterizer.srgb_rendertarget ? 1U : 0U
