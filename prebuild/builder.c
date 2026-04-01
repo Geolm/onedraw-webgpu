@@ -108,7 +108,7 @@ bool export_shaders(Arena* arena)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-bool build_font(float font_height, uint32_t atlas_width, uint32_t atlas_height, Arena *arena)
+bool build_font(float font_height, uint16_t atlas_width, uint16_t atlas_height, Arena *arena)
 {
     fprintf(stdout, "=> generating font\n");
 
