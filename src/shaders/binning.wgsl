@@ -412,7 +412,7 @@ fn clip_tile(tile: aabb, clip: clip_rect) -> bool
 fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f32) -> bool
 {
     let tile_enlarge_aabb = aabb_grow(tile_aabb, vec2<f32>(aabb_margin));
-    let is_hollow = (get_fillmode(cmd) != 0u); 
+    let is_hollow = (get_fillmode(cmd) == FILL_HOLLOW);
     let cmd_type = get_type(cmd);
     let data_idx = cmd.data_index;
     var intersection = false;

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 25989;
+static const size_t binning_shader_size = 25997;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -613,7 +613,7 @@ static const char binning_shader[] =
     "fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f32) -> bool\n"
     "{\n"
     "    let tile_enlarge_aabb = aabb_grow(tile_aabb, vec2<f32>(aabb_margin));\n"
-    "    let is_hollow = (get_fillmode(cmd) != 0u); \n"
+    "    let is_hollow = (get_fillmode(cmd) == FILL_HOLLOW);\n"
     "    let cmd_type = get_type(cmd);\n"
     "    let data_idx = cmd.data_index;\n"
     "    var intersection = false;\n"
