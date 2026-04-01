@@ -490,7 +490,8 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                         if (distance > g_draw_args.aa_width) 
                         {
                             final_color = vec4<f32>(cmd_color.rgb, final_color.a); 
-                        } else 
+                        } 
+                        else 
                         {
                             final_color = vec4<f32>(mix(cmd_color.rgb, final_color.rgb, linearstep(g_draw_args.aa_width, 0.0, distance)), final_color.a);
                         }
@@ -503,7 +504,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                     }
 
                     final_color.a *= alpha_factor;
-                    final_color = vec4<f32>(final_color.rgb * final_color.a, final_color.a);
                     output = accumulate_color(final_color, output);
                 }
             }

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24759;
+static const size_t rasterizer_shader_size = 24691;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -691,7 +691,8 @@ static const char rasterizer_shader[] =
     "                        if (distance > g_draw_args.aa_width) \n"
     "                        {\n"
     "                            final_color = vec4<f32>(cmd_color.rgb, final_color.a); \n"
-    "                        } else \n"
+    "                        } \n"
+    "                        else \n"
     "                        {\n"
     "                            final_color = vec4<f32>(mix(cmd_color.rgb, final_color.rgb, linearstep(g_draw_args.aa_width, 0.0, distance)), final_color.a);\n"
     "                        }\n"
@@ -704,7 +705,6 @@ static const char rasterizer_shader[] =
     "                    }\n"
     "\n"
     "                    final_color.a *= alpha_factor;\n"
-    "                    final_color = vec4<f32>(final_color.rgb * final_color.a, final_color.a);\n"
     "                    output = accumulate_color(final_color, output);\n"
     "                }\n"
     "            }\n"
