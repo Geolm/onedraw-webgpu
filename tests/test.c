@@ -159,15 +159,15 @@ void all_primitives(float width, float height)
                          radius * 0.5f, radius * 0.05f, miya_red);
     od_draw_text(renderer, cx-radius, cy-radius*1.25f, "oriented_box", miya_brown);
 
-    // slot(width, height, 6, &cx, &cy, &radius);
-    // od_draw_triangle(renderer, (float[]){cx, cy, cx - cosf(angle) * radius, cy + sinf(angle) * radius,
-    //                  cx + cosf(angle) * radius, cy +sinf(angle) * radius}, radius * 0.1f, miya_dark_green);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "triangle", miya_brown);
+    slot(width, height, 6, &cx, &cy, &radius);
+    od_draw_triangle(renderer, (float[]){cx, cy, cx - cosf(angle) * radius, cy + sinf(angle) * radius,
+                     cx + cosf(angle) * radius, cy +sinf(angle) * radius}, radius * 0.1f, miya_dark_green);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "triangle", miya_brown);
 
-    // slot(width, height, 7, &cx, &cy, &radius);
-    // od_draw_triangle_ring(renderer, (float[]){cx, cy, cx - cosf(angle) * radius, cy - sinf(angle) * radius,
-    //                       cx + cosf(angle) * radius, cy - sinf(angle) * radius}, 0.f, radius * 0.1f, miya_dark_grey);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "triangle_ring", miya_brown);
+    slot(width, height, 7, &cx, &cy, &radius);
+    od_draw_triangle_ring(renderer, (float[]){cx, cy, cx - cosf(angle) * radius, cy - sinf(angle) * radius,
+                          cx + cosf(angle) * radius, cy - sinf(angle) * radius}, 0.f, radius * 0.1f, miya_dark_grey);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "triangle_ring", miya_brown);
 
     slot(width, height, 8, &cx, &cy, &radius);
     od_draw_ellipse(renderer, cx + cosf(angle) * radius, cy - sinf(angle) * radius, cx - cosf(angle) * radius, cy + sinf(angle) * radius,

@@ -1125,6 +1125,12 @@ void allocate_dynamic_buffers(struct onedraw* r)
     dynamic_buffer_init(r, &r->commands.float_data, sizeof(float), MAX_DRAWDATA);
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+float draw_cmd_aabb_bump(struct onedraw* r)
+{
+    return r->rasterizer.aa_width + r->rasterizer.outline_width;
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // public functions
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -1435,7 +1441,7 @@ void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thick
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, primary_color);
 
-    float max_radius = radius + r->rasterizer.aa_width + r->rasterizer.outline_width;
+    float max_radius = radius + draw_cmd_aabb_bump(r);
 
     DB_PUSH(&r->commands.float_data, float, center.x);
     DB_PUSH(&r->commands.float_data, float, center.y);
@@ -1492,7 +1498,7 @@ void private_draw_oriented_box(struct onedraw* r, vec2 p0, vec2 p1, float width,
 
     thickness *= .5f;
     float roundness_thickness = (fillmode == fill_hollow) ? thickness : roundness;
-    aabb bb = aabb_from_rounded_obb(p0, p1, width, roundness_thickness + r->rasterizer.aa_width + r->rasterizer.outline_width);
+    aabb bb = aabb_from_rounded_obb(p0, p1, width, roundness_thickness + draw_cmd_aabb_bump(r));
 
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_oriented_box);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
@@ -1567,7 +1573,7 @@ void private_draw_ellipse(struct onedraw* r, vec2 p0, vec2 p1, float width, floa
     }
 
     thickness = float_max(thickness * .5f, 0.f);
-    aabb bb = aabb_from_rounded_obb(p0, p1, width, r->rasterizer.aa_width + r->rasterizer.outline_width + thickness);
+    aabb bb = aabb_from_rounded_obb(p0, p1, width, draw_cmd_aabb_bump(r) + thickness);
 
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_ellipse);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
@@ -1600,18 +1606,54 @@ void od_draw_ellipse_ring(struct onedraw* r, float ax, float ay, float bx, float
     private_draw_ellipse(r, vec2_set(ax, ay), vec2_set(bx, by), width, thickness, fill_hollow, srgb_color);
 }
 
+//----------------------------------------------------------------------------------------------------------------------------
+void private_draw_triangle(struct onedraw* r, const vec2* v, float roundness, float thickness, enum primitive_fillmode fillmode, draw_color srgb_color)
+{
+    // exclude invalid triangle
+    if (vec2_similar(v[0], v[1], HALF_PIXEL) || vec2_similar(v[2], v[1], HALF_PIXEL) || 
+        vec2_similar(v[0], v[2], HALF_PIXEL)) return;
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_triangle(struct onedraw* r, const float* vertices, float roundness, draw_color srgb_color)
-// {
+    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-// }
+    thickness *= .5f;
+    float roundness_thickness = (fillmode != fill_hollow) ? roundness : thickness;
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_triangle_ring(struct onedraw* r, const float* vertices, float roundness, float thickness, draw_color srgb_color)
-// {
+    aabb bb = aabb_from_triangle(v[0], v[1], v[2]);
+    aabb_grow(&bb, vec2_splat(roundness_thickness + draw_cmd_aabb_bump(r)));
 
-// }
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_triangle);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    for(uint32_t i=0; i<3; ++i)
+    {
+        DB_PUSH(&r->commands.float_data, float, v[i].x);
+        DB_PUSH(&r->commands.float_data, float, v[i].y);
+    }
+    DB_PUSH(&r->commands.float_data, float, roundness_thickness);
+
+    quantized_aabb aabb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_triangle(struct onedraw* r, const float* vertices, float roundness, draw_color srgb_color)
+{
+    private_draw_triangle(r, (const vec2*) vertices, roundness, 0.f, fill_solid, srgb_color);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_triangle_ring(struct onedraw* r, const float* vertices, float roundness, float thickness, draw_color srgb_color)
+{
+    private_draw_triangle(r, (const vec2*) vertices, roundness, thickness, fill_hollow, srgb_color);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // void od_draw_sector(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, draw_color srgb_color)
