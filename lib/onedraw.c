@@ -79,7 +79,7 @@
         _ptr[(db)->num_elements++] = (VALUE);                          \
     } while (0)
 
-#define LAST_CLIP_INDEX (r->commands.clipshapes.num_elements-1)
+#define LAST_CLIP_INDEX (uint8_t)(r->commands.clipshapes.num_elements-1)
 
 static inline uint32_t min_u32(uint32_t a, uint32_t b) {return a < b ? a : b;}
 static inline uint32_t max_u32(uint32_t a, uint32_t b) {return a > b ? a : b;}
@@ -427,11 +427,11 @@ static inline float bitcast_u32_to_float(uint32_t value)
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
-static inline gpu_draw_command gpu_draw_command_make(uint32_t data_index, uint8_t extra, uint8_t clip_index,
+static inline gpu_draw_command gpu_draw_command_make(size_t data_index, uint8_t extra, uint8_t clip_index,
                                                      enum primitive_fillmode fillmode, enum command_type type)
 {
     gpu_draw_command cmd;
-    cmd.data_index = data_index;
+    cmd.data_index = (uint32_t)data_index;
     cmd.flags = (uint32_t)extra | ((uint32_t)clip_index << 8) | ((uint32_t)fillmode << 16) | ((uint32_t)type << 24);
     return cmd;
 }
@@ -992,7 +992,7 @@ void build_font(struct onedraw* r)
         .mipmapFilter = WGPUMipmapFilterMode_Nearest, // no mipmap
         .lodMinClamp = 0.0f,
         .lodMaxClamp = 1.0f,
-        .maxAnisotropy = 1.f
+        .maxAnisotropy = 1
     };
 
     r->font.sampler = wgpuDeviceCreateSampler(r->device, &sampler_desc);
@@ -1107,7 +1107,7 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
         .mipmapFilter = WGPUMipmapFilterMode_Nearest, // no mipmap
         .lodMinClamp = 0.0f,
         .lodMaxClamp = 1.0f,
-        .maxAnisotropy = 1.f
+        .maxAnisotropy = 1
     };
 
     r->atlas.sampler = wgpuDeviceCreateSampler(r->device, &sampler_desc);
@@ -1267,7 +1267,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .aa_width = VEC2_SQR2,
         .clear_color = r->rasterizer.clear_color,
         .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
-        .num_commands = r->commands.list.num_elements,
+        .num_commands = (uint32_t)r->commands.list.num_elements,
         .max_nodes = MAX_NODES_COUNT,
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
