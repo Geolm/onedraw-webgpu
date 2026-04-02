@@ -304,6 +304,7 @@ static inline od_mem_interface default_allocator(void)
 
 static inline float float_max(float a, float b) {return (a>b) ? a : b;}
 static inline float float_clamp(float f, float a, float b) {if (f<a) return a; if (f>b) return b; return f;}
+static inline void float_swap(float *a, float *b) {float temp = *a; *a = *b; *b = temp;} 
 static inline vec2 vec2_splat(float value) {return (vec2) {value, value};}
 static inline vec2 vec2_set(float x, float y) {return (vec2) {x, y};}
 static inline vec2 vec2_add(vec2 a, vec2 b) {return (vec2) {a.x + b.x, a.y + b.y};}
@@ -1131,6 +1132,15 @@ float draw_cmd_aabb_bump(struct onedraw* r)
     return r->rasterizer.aa_width + r->rasterizer.outline_width;
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+bool buffers_are_full(struct onedraw* r, size_t num_floats)
+{
+    return ((r->commands.float_data.num_elements + num_floats >= r->commands.float_data.num_elements_max) ||
+            (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+            (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+            (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max));
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // public functions
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -1426,10 +1436,7 @@ void od_set_clear_color(struct onedraw* r, draw_color srgb_color)
 void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thickness, enum primitive_fillmode fillmode,
                        draw_color primary_color, draw_color secondary_color)
 {
-    if ((r->commands.float_data.num_elements + 4 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 4))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1487,10 +1494,7 @@ void private_draw_oriented_box(struct onedraw* r, vec2 p0, vec2 p1, float width,
     if (vec2_similar(p0, p1, HALF_PIXEL))
         return;
 
-    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 7))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1563,10 +1567,7 @@ void private_draw_ellipse(struct onedraw* r, vec2 p0, vec2 p1, float width, floa
         return;
     }
 
-    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 7))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1613,10 +1614,7 @@ void private_draw_triangle(struct onedraw* r, const vec2* v, float roundness, fl
     if (vec2_similar(v[0], v[1], HALF_PIXEL) || vec2_similar(v[2], v[1], HALF_PIXEL) || 
         vec2_similar(v[0], v[2], HALF_PIXEL)) return;
 
-    if ((r->commands.float_data.num_elements + 7 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 7))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1668,16 +1666,76 @@ void od_draw_triangle_ring(struct onedraw* r, const float* vertices, float round
 // }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, float aperture, float radius, float thickness, draw_color srgb_color)
-// {
+void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, float aperture, float radius, float thickness, draw_color srgb_color)
+{
+    if (buffers_are_full(r, 8))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-// }
+    vec2 center = {cx, cy};
+    vec2 direction = {dx, dy};
+
+    aperture = float_clamp(aperture, 0.f, VEC2_PI);
+    thickness = float_max(thickness, 0.f);
+    aabb bb = aabb_from_circle(center, radius);
+    aabb_grow(&bb, vec2_splat(thickness + draw_cmd_aabb_bump(r)));
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_arc);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, center.x);
+    DB_PUSH(&r->commands.float_data, float, center.y);
+    DB_PUSH(&r->commands.float_data, float, radius);
+    DB_PUSH(&r->commands.float_data, float, direction.x);
+    DB_PUSH(&r->commands.float_data, float, direction.y);
+    DB_PUSH(&r->commands.float_data, float, sinf(aperture));
+    DB_PUSH(&r->commands.float_data, float, cosf(aperture));
+    DB_PUSH(&r->commands.float_data, float, thickness);
+
+    quantized_aabb quantized_bb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &quantized_bb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, quantized_bb);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, float radius, draw_color srgb_color)
-// {
+void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, float radius, draw_color srgb_color)
+{
+    if ((r->commands.float_data.num_elements + 5 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-// }
+    if (x0>x1) 
+        float_swap(&x0, &x1);
+    if (y0>y1) 
+        float_swap(&y0, &y1);
+
+    aabb box = (aabb) {.min = {x0, y0}, .max = {x1, y1}};
+
+    vec2 center = vec2_scale(vec2_add(box.min, box.max), .5f);
+    vec2 half_extents = vec2_scale(vec2_sub(box.max, box.min), .5f);
+
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_aabox);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, center.x);
+    DB_PUSH(&r->commands.float_data, float, center.y);
+    DB_PUSH(&r->commands.float_data, float, half_extents.x);
+    DB_PUSH(&r->commands.float_data, float, half_extents.y);
+    DB_PUSH(&r->commands.float_data, float, radius);
+
+    aabb_grow(&box, vec2_splat(draw_cmd_aabb_bump(r)));
+    quantized_aabb quantized_box = quantized_aabb_make(box.min.x, box.min.y, box.max.x, box.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &quantized_box);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, quantized_box);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float half_width, float half_height, float roundness, draw_color srgb_color)

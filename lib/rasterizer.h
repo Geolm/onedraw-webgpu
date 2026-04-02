@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 24691;
+static const size_t rasterizer_shader_size = 25333;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -402,7 +402,7 @@ static const char rasterizer_shader[] =
     "    return max(l, m * sign(aperture.y * px_abs - aperture.x * p.y));\n"
     "}\n"
     "\n"
-    "fn sd_oriented_ring(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2<f32>, aperture: vec2<f32>, radius: f32, thickness: f32) -> f32 \n"
+    "fn sd_oriented_arc(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2<f32>, aperture: vec2<f32>, radius: f32, thickness: f32) -> f32 \n"
     "{\n"
     "    let dir = -skew(direction_in);\n"
     "    var p = position_in - center;\n"
@@ -416,8 +416,8 @@ static const char rasterizer_shader[] =
     "    \n"
     "    // Rotate by aperture matrix\n"
     "    p = vec2<f32>(\n"
-    "        aperture.y * p.x + aperture.x * p.y,\n"
-    "       -aperture.x * p.x + aperture.y * p.y\n"
+    "        -aperture.y * p.x - aperture.x * p.y,\n"
+    "        aperture.x * p.x - aperture.y * p.y\n"
     "    );\n"
     "    \n"
     "    let half_thick = thickness * 0.5;\n"
@@ -658,6 +658,15 @@ static const char rasterizer_shader[] =
     "                            cmd_color = cmd_color * tex_color;\n"
     "                            distance = 0.0;\n"
     "                        }\n"
+    "                    }\n"
+    "                    case PRIMITIVE_ARC:\n"
+    "                    {\n"
+    "                        let center= vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);\n"
+    "                        let radius = g_draw_data[data_idx + 2u];\n"
+    "                        let direction= vec2<f32>(g_draw_data[data_idx + 3u], g_draw_data[data_idx + 4u]);\n"
+    "                        let aperture= vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);\n"
+    "                        let thickness = g_draw_data[data_idx + 7u];\n"
+    "                        distance = sd_oriented_arc(in.pos.xy, center, direction, aperture, radius, thickness);\n"
     "                    }\n"
     "                    // TODO : other cases\n"
     "                    default: { distance = 1e8; }\n"

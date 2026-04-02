@@ -187,9 +187,9 @@ void all_primitives(float width, float height)
     // od_draw_sector_ring(renderer, cx, cy, radius, -angle, 0.78539816f, radius * 0.1f, miya_dark_blue);
     // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "sector_ring", miya_brown);
 
-    // slot(width, height, 12, &cx, &cy, &radius);
-    // od_draw_arc(renderer, cx, cy, cosf(angle), sinf(angle), 0.78539816f, radius, radius * 0.1f, miya_red);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "arc", miya_brown);
+    slot(width, height, 12, &cx, &cy, &radius);
+    od_draw_arc(renderer, cx, cy, cosf(angle), sinf(angle), 0.78539816f, radius, radius * 0.1f, miya_red);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "arc", miya_brown);
 
     slot(width, height, 13, &cx, &cy, &radius);
     od_draw_text(renderer, cx-radius, cy-radius, "Some text\nABCDEFGHILMNO\nPQRSTUVWYZ\n1234567890!@#$%?&*()\nSphinx of black\n quartz, judge my vow.\n"

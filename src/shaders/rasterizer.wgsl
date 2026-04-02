@@ -201,7 +201,7 @@ fn sd_oriented_pie(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2
     return max(l, m * sign(aperture.y * px_abs - aperture.x * p.y));
 }
 
-fn sd_oriented_ring(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2<f32>, aperture: vec2<f32>, radius: f32, thickness: f32) -> f32 
+fn sd_oriented_arc(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2<f32>, aperture: vec2<f32>, radius: f32, thickness: f32) -> f32 
 {
     let dir = -skew(direction_in);
     var p = position_in - center;
@@ -215,8 +215,8 @@ fn sd_oriented_ring(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec
     
     // Rotate by aperture matrix
     p = vec2<f32>(
-        aperture.y * p.x + aperture.x * p.y,
-       -aperture.x * p.x + aperture.y * p.y
+        -aperture.y * p.x - aperture.x * p.y,
+        aperture.x * p.x - aperture.y * p.y
     );
     
     let half_thick = thickness * 0.5;
@@ -457,6 +457,15 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                             cmd_color = cmd_color * tex_color;
                             distance = 0.0;
                         }
+                    }
+                    case PRIMITIVE_ARC:
+                    {
+                        let center= vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+                        let radius = g_draw_data[data_idx + 2u];
+                        let direction= vec2<f32>(g_draw_data[data_idx + 3u], g_draw_data[data_idx + 4u]);
+                        let aperture= vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);
+                        let thickness = g_draw_data[data_idx + 7u];
+                        distance = sd_oriented_arc(in.pos.xy, center, direction, aperture, radius, thickness);
                     }
                     // TODO : other cases
                     default: { distance = 1e8; }
