@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 25491;
+static const size_t rasterizer_shader_size = 25489;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -509,7 +509,7 @@ static const char rasterizer_shader[] =
     "        let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || \n"
     "                                in.pos.x > clip.max_x || in.pos.y > clip.max_y);\n"
     "\n"
-    "        //if (!clipped)\n"
+    "        if (!clipped)\n"
     "        {\n"
     "            var distance: f32 = 10.0;\n"
     "\n"

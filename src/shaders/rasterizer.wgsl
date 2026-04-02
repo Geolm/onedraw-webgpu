@@ -306,7 +306,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || 
                                 in.pos.x > clip.max_x || in.pos.y > clip.max_y);
 
-        //if (!clipped)
+        if (!clipped)
         {
             var distance: f32 = 10.0;
 
