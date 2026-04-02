@@ -1655,17 +1655,61 @@ void od_draw_triangle_ring(struct onedraw* r, const float* vertices, float round
     private_draw_triangle(r, (const vec2*) vertices, roundness, thickness, fill_hollow, srgb_color);
 }
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_sector(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, draw_color srgb_color)
-// {
+//----------------------------------------------------------------------------------------------------------------------------
+void private_draw_pie(struct onedraw* r, vec2 center, vec2 direction, float radius, float aperture, float thickness, enum primitive_fillmode fillmode, draw_color srgb_color)
+{
+    if (aperture <= FLT_EPSILON)
+        return;
 
-// }
+    if (buffers_are_full(r, 8))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+    
+    aperture = float_clamp(aperture, 0.f, VEC2_PI);
+    thickness = float_max(thickness * .5f, 0.f);
+    aabb bb = aabb_from_circle(center, radius);
+    aabb_grow(&bb, vec2_splat(thickness + draw_cmd_aabb_bump(r)));
 
-//-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_sector_ring(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, float thickness, draw_color srgb_color)
-// {
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_pie);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, center.x);
+    DB_PUSH(&r->commands.float_data, float, center.y);
+    DB_PUSH(&r->commands.float_data, float, radius);
+    DB_PUSH(&r->commands.float_data, float, direction.x);
+    DB_PUSH(&r->commands.float_data, float, direction.y);
+    DB_PUSH(&r->commands.float_data, float, sinf(aperture));
+    DB_PUSH(&r->commands.float_data, float, cosf(aperture));
 
-// }
+    if (fillmode == fill_hollow)
+    {
+        DB_PUSH(&r->commands.float_data, float, thickness);
+    }
+
+    quantized_aabb quantized_bb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &quantized_bb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, quantized_bb);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_sector(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, draw_color srgb_color)
+{
+    vec2 center = {cx, cy};
+    float aperture = sweep_angle * .5f;
+    vec2 direction = vec2_direction(start_angle + aperture);
+    private_draw_pie(r, center, direction, radius, fabs(aperture), 0.f, fill_solid, srgb_color);
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+void od_draw_sector_ring(struct onedraw* r, float cx, float cy, float radius, float start_angle, float sweep_angle, float thickness, draw_color srgb_color)
+{
+    vec2 center = {cx, cy};
+    float aperture = sweep_angle * .5f;
+    vec2 direction = vec2_direction(start_angle + aperture);
+    private_draw_pie(r, center, direction, radius, fabs(aperture), thickness, fill_hollow, srgb_color);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, float aperture, float radius, float thickness, draw_color srgb_color)

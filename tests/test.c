@@ -179,13 +179,13 @@ void all_primitives(float width, float height)
                          radius, radius * 0.1f, miya_light_grey);
     od_draw_text(renderer, cx-radius, cy-radius*1.25f, "ellipse_ring", miya_brown);
 
-    // slot(width, height, 10, &cx, &cy, &radius);
-    // od_draw_sector(renderer, cx, cy, radius, angle, 0.78539816f, miya_pink);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "sector", miya_brown);
+    slot(width, height, 10, &cx, &cy, &radius);
+    od_draw_sector(renderer, cx, cy, radius, angle, 0.78539816f, miya_pink);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "sector", miya_brown);
 
-    // slot(width, height, 11, &cx, &cy, &radius);
-    // od_draw_sector_ring(renderer, cx, cy, radius, -angle, 0.78539816f, radius * 0.1f, miya_dark_blue);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "sector_ring", miya_brown);
+    slot(width, height, 11, &cx, &cy, &radius);
+    od_draw_sector_ring(renderer, cx, cy, radius, -angle, 0.78539816f, radius * 0.1f, miya_dark_blue);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "sector_ring", miya_brown);
 
     slot(width, height, 12, &cx, &cy, &radius);
     od_draw_arc(renderer, cx, cy, cosf(angle), sinf(angle), 0.78539816f, radius, radius * 0.1f, miya_red);

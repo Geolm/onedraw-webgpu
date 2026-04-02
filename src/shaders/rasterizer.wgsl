@@ -190,10 +190,8 @@ fn sd_oriented_pie(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2
     let dir = -skew(direction_in);
     let p_rel = position_in - center;
     
-    let p = vec2<f32>(
-        dir.x * p_rel.x - dir.y * p_rel.y,
-        dir.y * p_rel.x + dir.x * p_rel.y
-    );
+    let rot = mat2x2<f32>(vec2<f32>(dir.x, dir.y),vec2<f32>(-dir.y, dir.x));
+    let p = p_rel * rot;
     
     let px_abs = abs(p.x);
     let l = length(p) - radius;
@@ -204,20 +202,14 @@ fn sd_oriented_pie(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2
 fn sd_oriented_arc(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2<f32>, aperture: vec2<f32>, radius: f32, thickness: f32) -> f32 
 {
     let dir = -skew(direction_in);
-    var p = position_in - center;
-    
-    // Rotate to direction
-    p = vec2<f32>(
-        dir.x * p.x - dir.y * p.y,
-        dir.y * p.x + dir.x * p.y
-    );
+    var p_rel = position_in - center;
+    let rot = mat2x2<f32>(vec2<f32>(dir.x, dir.y),vec2<f32>(-dir.y, dir.x));
+    var p = p_rel * rot;
+
     p.x = abs(p.x);
     
     // Rotate by aperture matrix
-    p = vec2<f32>(
-        -aperture.y * p.x - aperture.x * p.y,
-        aperture.x * p.x - aperture.y * p.y
-    );
+    p = vec2<f32>(-aperture.y * p.x - aperture.x * p.y,aperture.x * p.x - aperture.y * p.y);
     
     let half_thick = thickness * 0.5;
     let d1 = abs(length(p) - radius) - half_thick;
@@ -470,6 +462,19 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                         let aperture= vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);
                         let thickness = g_draw_data[data_idx + 7u];
                         distance = sd_oriented_arc(in.pos.xy, center, direction, aperture, radius, thickness);
+                    }
+                    case PRIMITIVE_PIE:
+                    {
+                        let center= vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+                        let radius = g_draw_data[data_idx + 2u];
+                        let direction= vec2<f32>(g_draw_data[data_idx + 3u], g_draw_data[data_idx + 4u]);
+                        let aperture= vec2<f32>(g_draw_data[data_idx + 5u], g_draw_data[data_idx + 6u]);
+                        distance = sd_oriented_pie(in.pos.xy, center, direction, aperture, radius);
+
+                        if (fillmode == FILL_HOLLOW) 
+                        {
+                            distance = abs(distance) - g_draw_data[data_idx + 7u];
+                        }
                     }
                     // TODO : other cases
                     default: { distance = 1e8; }
