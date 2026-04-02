@@ -29,7 +29,7 @@ struct draw_args
     num_tile_height: u32,
     max_nodes: u32,
     aa_width: f32,
-    srgb_backbuffer: u32,
+    options: u32,
 };
 
 struct glyph
@@ -192,4 +192,6 @@ const FILL_SOLID:u32 = 0u;
 const FILL_OUTLINE:u32 = 1u;
 const FILL_HOLLOW:u32 = 2u;
 const FILL_GRADIENT:u32 = 3u;
+const OPTION_SRGB_BACKBUFFER:u32 = (1u<<0);
+const OPTION_DEBUG_BINNING:u32 = (1u<<1);
 

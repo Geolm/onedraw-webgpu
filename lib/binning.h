@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 25997;
+static const size_t binning_shader_size = 26075;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -36,7 +36,7 @@ static const char binning_shader[] =
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
     "    aa_width: f32,\n"
-    "    srgb_backbuffer: u32,\n"
+    "    options: u32,\n"
     "};\n"
     "\n"
     "struct glyph\n"
@@ -199,6 +199,8 @@ static const char binning_shader[] =
     "const FILL_OUTLINE:u32 = 1u;\n"
     "const FILL_HOLLOW:u32 = 2u;\n"
     "const FILL_GRADIENT:u32 = 3u;\n"
+    "const OPTION_SRGB_BACKBUFFER:u32 = (1u<<0);\n"
+    "const OPTION_DEBUG_BINNING:u32 = (1u<<1);\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Bindgroups\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"

@@ -268,7 +268,11 @@ fn tile_vs(@builtin(instance_index) instance_id: u32, @builtin(vertex_index) ver
 fn tile_fs(in: vs_out) -> @location(0) vec4<f32> 
 {
     var output:vec4<f32> = g_draw_args.clear_color;
-    //var output:vec4<f32> = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+
+    if ((g_draw_args.options & OPTION_DEBUG_BINNING) != 0u)
+    {
+        output = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+    }
  
     var node_idx:u32 = g_tile_heads[in.tile_index];
     if (node_idx == INVALID_INDEX)
@@ -520,7 +524,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         node_idx = node.next;
     }
 
-    if (g_draw_args.srgb_backbuffer == 0u)
+    if ((g_draw_args.options & OPTION_SRGB_BACKBUFFER) == 0u)
     {
         output = linear_to_srgb(output);
     }

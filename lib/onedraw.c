@@ -55,6 +55,8 @@
 #define MAX_COMMANDS (1U<<16)
 #define MAX_DRAWDATA (MAX_COMMANDS*4)
 #define MAX_CLIPS (256)
+#define OPTION_SRGB_BACKBUFFER (1U<<0)
+#define OPTION_DEBUG_BINNING (1U<<1)
 
 // ---------------------------------------------------------------------------------------------------------------------------
 // Macros
@@ -230,7 +232,7 @@ typedef struct gpu_draw_args
     uint32_t num_tile_height;
     uint32_t max_nodes;
     float aa_width;
-    uint32_t srgb_rendertarget;
+    uint32_t options;
 } gpu_draw_args;
 
 typedef struct gpu_draw_command 
@@ -1281,7 +1283,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .max_nodes = MAX_NODES_COUNT,
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
-        .srgb_rendertarget = r->rasterizer.srgb_rendertarget ? 1U : 0U
+        .options = r->rasterizer.srgb_rendertarget ? OPTION_SRGB_BACKBUFFER : 0U
     };
     DB_PUSH(&r->commands.draw_args, gpu_draw_args, args);
 

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 25333;
+static const size_t rasterizer_shader_size = 25491;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -36,7 +36,7 @@ static const char rasterizer_shader[] =
     "    num_tile_height: u32,\n"
     "    max_nodes: u32,\n"
     "    aa_width: f32,\n"
-    "    srgb_backbuffer: u32,\n"
+    "    options: u32,\n"
     "};\n"
     "\n"
     "struct glyph\n"
@@ -199,6 +199,8 @@ static const char rasterizer_shader[] =
     "const FILL_OUTLINE:u32 = 1u;\n"
     "const FILL_HOLLOW:u32 = 2u;\n"
     "const FILL_GRADIENT:u32 = 3u;\n"
+    "const OPTION_SRGB_BACKBUFFER:u32 = (1u<<0);\n"
+    "const OPTION_DEBUG_BINNING:u32 = (1u<<1);\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Bindgroups\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
@@ -469,7 +471,11 @@ static const char rasterizer_shader[] =
     "fn tile_fs(in: vs_out) -> @location(0) vec4<f32> \n"
     "{\n"
     "    var output:vec4<f32> = g_draw_args.clear_color;\n"
-    "    //var output:vec4<f32> = vec4<f32>(0.0, 0.0, 1.0, 1.0);\n"
+    "\n"
+    "    if ((g_draw_args.options & OPTION_DEBUG_BINNING) != 0u)\n"
+    "    {\n"
+    "        output = vec4<f32>(0.0, 0.0, 1.0, 1.0);\n"
+    "    }\n"
     " \n"
     "    var node_idx:u32 = g_tile_heads[in.tile_index];\n"
     "    if (node_idx == INVALID_INDEX)\n"
@@ -721,7 +727,7 @@ static const char rasterizer_shader[] =
     "        node_idx = node.next;\n"
     "    }\n"
     "\n"
-    "    if (g_draw_args.srgb_backbuffer == 0u)\n"
+    "    if ((g_draw_args.options & OPTION_SRGB_BACKBUFFER) == 0u)\n"
     "    {\n"
     "        output = linear_to_srgb(output);\n"
     "    }\n"
