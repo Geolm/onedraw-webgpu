@@ -51,7 +51,7 @@
 #define COLINEAR_THRESHOLD (.1f)
 #define BUFFER_FRAME_COUNT (3)
 #define TILE_SIZE (16)
-#define MAX_NODES_COUNT (1U<<22)
+#define MAX_NODES_COUNT (1U<<20)
 #define MAX_COMMANDS (1U<<16)
 #define MAX_DRAWDATA (MAX_COMMANDS*4)
 #define MAX_CLIPS (256)
@@ -516,6 +516,12 @@ void dynamic_buffer_upload(WGPUQueue queue, dynamic_buffer* b, uint32_t index)
     assert(index < BUFFER_FRAME_COUNT);
     if (b->num_elements > 0)
         wgpuQueueWriteBuffer(queue, b->buffers[index], 0, b->cpu_buffer, b->num_elements * b->element_size);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+size_t dynamic_buffer_get_gpu_mem(const dynamic_buffer* b)
+{
+    return BUFFER_FRAME_COUNT * b->element_size * b->num_elements_max;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -1155,17 +1161,20 @@ struct onedraw* od_init(const onedraw_def* def)
     struct onedraw* r = mem_interface.malloc_fn(sizeof(struct onedraw), mem_interface.user);
     assert(def->device != NULL);
 
-    // clear everything to zero
-    *r = (struct onedraw) {0};
-
-    r->mem_interface = mem_interface;
-    r->custom_log = def->log_func;
-    r->device = def->device;
-    r->rasterizer.srgb_rendertarget = def->srgb_rendertarget;
-    r->rasterizer.aa_width = VEC2_SQR2;
-    r->rasterizer.clear_rendertarget = def->clear_rendertarget;
-    r->rasterizer.clear_color = (vec4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f};
-    r->queue = wgpuDeviceGetQueue(r->device);
+    *r = (struct onedraw) 
+    {
+        .mem_interface = mem_interface,
+        .custom_log = def->log_func,
+        .device = def->device,
+        .rasterizer =
+        {
+            .srgb_rendertarget = def->srgb_rendertarget,
+            .aa_width = VEC2_SQR2,
+            .clear_rendertarget = def->clear_rendertarget,
+            .clear_color = (vec4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f}
+        },
+        .queue = wgpuDeviceGetQueue(def->device)
+    };
     assert_msg(r->queue != NULL, "cannot create queue from device");
 
     // resource creation
@@ -1203,7 +1212,6 @@ struct onedraw* od_init(const onedraw_def* def)
     build_layout(r);
     build_bind_groups(r);
     build_pso(r, def->surface_format);
-    // od_build_depthstencil_state(r);
 
     return r;
 }
@@ -1397,6 +1405,8 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->tiles.counters, wgpuBufferRelease);
     SAFE_RELEASE(r->tiles.nodes, wgpuBufferRelease);
     SAFE_RELEASE(r->tiles.heads, wgpuBufferRelease);
+    SAFE_RELEASE(r->tiles.indices, wgpuBufferRelease);
+    SAFE_RELEASE(r->tiles.indirect_draw_params, wgpuBufferRelease);
     SAFE_RELEASE(r->rasterizer.pso, wgpuRenderPipelineRelease);
     SAFE_RELEASE(r->tiles.binning_pso, wgpuComputePipelineRelease);
     SAFE_RELEASE(r->tiles.write_indirect_buffer_pso, wgpuComputePipelineRelease);
@@ -1404,10 +1414,23 @@ void od_terminate(struct onedraw* r)
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
-void od_get_stats(struct onedraw* r, od_stats* stats)
+void od_get_stats(const struct onedraw* r, od_stats* stats)
 {
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(stats);
+    stats->frame_index = r->stats.frame_index;
+    stats->gpu_memory_usage = dynamic_buffer_get_gpu_mem(&r->commands.aabb);
+    stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.clipshapes);
+    stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.colors);
+    stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.float_data);
+    stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.list);
+    stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.draw_args);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->font.glyphs);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->tiles.counters);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->tiles.heads);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->tiles.indices);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->tiles.indirect_draw_params);
+    stats->gpu_memory_usage += wgpuBufferGetSize(r->tiles.nodes);
+    stats->gpu_memory_usage += r->font.desc.texture_width * r->font.desc.texture_height;
+    stats->gpu_memory_usage += r->atlas.width * r->atlas.height * r->atlas.num_slices * 4; // assuming atlas is RGBA8
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
@@ -1469,6 +1492,26 @@ void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thick
     quantized_aabb aabb = quantized_aabb_make(center.x - max_radius, center.y - max_radius, center.x + max_radius, center.y + max_radius);
     merge_quantized_aabb(r->commands.group_aabb, &aabb);
     DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+float od_get_text_height(const struct onedraw* r)
+{
+    return r->font.desc.font_height;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+float od_get_text_width(const struct onedraw* r, const char* text)
+{
+    float width = 0.f;
+    for(const char *c = text; *c != 0; c++)
+    {
+        if (*c >= r->font.desc.first_glyph && *c <= (r->font.desc.first_glyph + r->font.desc.num_glyphs))
+            width += r->font.desc.glyphs[*c - r->font.desc.first_glyph].advance_x;
+        else
+            width += r->font.desc.glyphs['_'- r->font.desc.first_glyph].advance_x * .65f;
+    }
+    return width;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
@@ -1748,10 +1791,7 @@ void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, floa
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, float radius, draw_color srgb_color)
 {
-    if ((r->commands.float_data.num_elements + 5 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 5))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1784,10 +1824,7 @@ void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, floa
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float width, float height, float roundness, draw_color srgb_color)
 {
-    if ((r->commands.float_data.num_elements + 5 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 5))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1822,10 +1859,7 @@ void od_draw_char(struct onedraw* r, float x, float y, char c, draw_color srgb_c
     if (c < r->font.desc.first_glyph || c > (r->font.desc.first_glyph + r->font.desc.num_glyphs))
         return;
 
-    if ((r->commands.float_data.num_elements + 2 >= r->commands.float_data.num_elements_max) ||
-        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
-        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
-        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    if (buffers_are_full(r, 2))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;

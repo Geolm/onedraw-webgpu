@@ -261,10 +261,10 @@ void all_primitives(float width, float height)
     od_draw_text(renderer, cx-radius, cy-radius*1.25f, "capsule_gradient", miya_brown);
 
 
-    // od_stats stats;
-    // od_get_stats(renderer, &stats);
-    // snprintf(string, 256, "GPU Memory usage : %zu kb", stats.gpu_memory_usage>>10);
-    // od_draw_text(renderer, 0, sapp_heightf() - od_text_height(renderer) * 2.f, string, miya_blue);
+    od_stats stats;
+    od_get_stats(renderer, &stats);
+    snprintf(string, 256, "GPU Memory usage : %zu kb", stats.gpu_memory_usage>>10);
+    od_draw_text(renderer, 0, height - od_get_text_height(renderer) * 2.f, string, miya_blue);
 
     // snprintf(string, 256, "num commands : %u", stats.peak_num_draw_cmd);
     // od_draw_text(renderer, (sapp_widthf() - od_text_width(renderer, string)) * .5f,

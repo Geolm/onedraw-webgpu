@@ -164,7 +164,7 @@ void od_terminate(struct onedraw* r);
 //-----------------------------------------------------------------------------------------------------------------------------
 // Fill the od_stats structure with latest data
 //      [stats]     non-NULL pointer to the structure
-void od_get_stats(struct onedraw* r, od_stats* stats);
+void od_get_stats(const struct onedraw* r, od_stats* stats);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Sets the clear color
@@ -199,11 +199,11 @@ void od_end_group(struct onedraw* r, draw_color outline_color);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Returns the height of the font in pixels
-float od_text_height(struct onedraw* r);
+float od_get_text_height(const struct onedraw* r);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Returns the width of the string [text] in pixels
-float od_text_width(struct onedraw* r, const char* text);
+float od_get_text_width(const struct onedraw* r, const char* text);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Draws a ring (circle)
