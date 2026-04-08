@@ -94,9 +94,10 @@ typedef struct onedraw_def
     WGPUTextureFormat surface_format;
     uint32_t viewport_width;
     uint32_t viewport_height;
+    uint32_t max_nodes;
     void (*log_func)(const char* string);
     bool srgb_rendertarget;
-    bool clear_rendertarget;
+    bool overlay_rendertarget;
 
     struct
     {
@@ -124,6 +125,8 @@ extern "C" {
 //      [viewport_width]
 //      [viewport_height]
 //      [log_func]              pointer to the log function, can be NULL if no log required
+//      [max_nodes]             number max of nodes (linked list), if 0 set to default value MAX_NODES
+//      [overlay_rendertarget]  if true, the rendertarget is not cleared (useful for layer 2d on top on previous render)
 //      [texture_array]
 //          [width]             width of all textures in the array, if 0 (undefined) the array won't be created
 //          [height]            

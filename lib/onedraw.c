@@ -51,7 +51,7 @@
 #define COLINEAR_THRESHOLD (.1f)
 #define BUFFER_FRAME_COUNT (3)
 #define TILE_SIZE (16)
-#define MAX_NODES_COUNT (1U<<20)
+#define DEFAULT_MAX_NODES (1U<<20)
 #define MAX_COMMANDS (1U<<16)
 #define MAX_DRAWDATA (MAX_COMMANDS*4)
 #define MAX_CLIPS (256)
@@ -1170,7 +1170,7 @@ struct onedraw* od_init(const onedraw_def* def)
         {
             .srgb_rendertarget = def->srgb_rendertarget,
             .aa_width = VEC2_SQR2,
-            .clear_rendertarget = def->clear_rendertarget,
+            .clear_rendertarget = !def->overlay_rendertarget,
             .clear_color = (vec4) {.x = 0.f, .y = 0.f, .z = 0.f, .w = 1.f}
         },
         .queue = wgpuDeviceGetQueue(def->device)
@@ -1191,7 +1191,7 @@ struct onedraw* od_init(const onedraw_def* def)
     {
         .label = WGPU_STRING_VIEW("tile_nodes"),
         .mappedAtCreation = false,
-        .size = sizeof(uint64_t) * MAX_NODES_COUNT,
+        .size = sizeof(uint64_t) * ((def->max_nodes == 0) ? DEFAULT_MAX_NODES : def->max_nodes),
         .usage = WGPUBufferUsage_Storage
     });
     assert_msg(r->tiles.nodes != NULL, "failed to create tile nodes buffer");
@@ -1288,7 +1288,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .clear_color = r->rasterizer.clear_color,
         .screen_div = {1.f / (float)r->rasterizer.width, 1.f / (float)r->rasterizer.height},
         .num_commands = (uint32_t)r->commands.list.num_elements,
-        .max_nodes = MAX_NODES_COUNT,
+        .max_nodes = DEFAULT_MAX_NODES,
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
         .options = r->rasterizer.srgb_rendertarget ? OPTION_SRGB_BACKBUFFER : 0U

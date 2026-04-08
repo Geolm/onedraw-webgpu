@@ -48,7 +48,6 @@ void init(void)
         .viewport_width = width,
         .viewport_height = height,
         .srgb_rendertarget = true,
-        .clear_rendertarget = true,
         .surface_format = wgpu.surface_cfg.format
     });
 
