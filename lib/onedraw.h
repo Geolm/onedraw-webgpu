@@ -316,7 +316,7 @@ void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, floa
 // Draws a gaussian blurred box
 //      [cx, cy]                    center of the box
 //      [width, height]             size of the box
-void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float half_width, float half_height, float roundness, draw_color srgb_color);
+void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float width, float height, float roundness, draw_color srgb_color);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Draws one character

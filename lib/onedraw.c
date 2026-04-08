@@ -1762,11 +1762,9 @@ void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, floa
     if (y0>y1) 
         float_swap(&y0, &y1);
 
-    aabb box = (aabb) {.min = {x0, y0}, .max = {x1, y1}};
-
+    aabb box = {.min = {x0, y0}, .max = {x1, y1}};
     vec2 center = vec2_scale(vec2_add(box.min, box.max), .5f);
     vec2 half_extents = vec2_scale(vec2_sub(box.max, box.min), .5f);
-
 
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_aabox);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
@@ -1784,10 +1782,39 @@ void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, floa
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float half_width, float half_height, float roundness, draw_color srgb_color)
-// {
+void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float width, float height, float roundness, draw_color srgb_color)
+{
+    if ((r->commands.float_data.num_elements + 5 >= r->commands.float_data.num_elements_max) ||
+        (r->commands.colors.num_elements >= r->commands.colors.num_elements_max) ||
+        (r->commands.list.num_elements >= r->commands.list.num_elements_max) ||
+        (r->commands.aabb.num_elements >= r->commands.aabb.num_elements_max))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
 
-// }
+    float half_width = width * .5f;
+    float half_height = height * .5f;
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_blurred_box);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH(&r->commands.float_data, float, cx);
+    DB_PUSH(&r->commands.float_data, float, cy);
+    DB_PUSH(&r->commands.float_data, float, half_width);
+    DB_PUSH(&r->commands.float_data, float, half_height);
+    DB_PUSH(&r->commands.float_data, float, roundness);
+
+    aabb box =
+    {
+        .min = {cx - half_width - roundness, cy - half_height - roundness},
+        .max = {cx + half_width + roundness, cy + half_height + roundness}
+    };
+
+    quantized_aabb quantized_box = quantized_aabb_make(box.min.x, box.min.y, box.max.x, box.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &quantized_box);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, quantized_box);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_draw_char(struct onedraw* r, float x, float y, char c, draw_color srgb_color)

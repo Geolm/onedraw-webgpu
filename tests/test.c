@@ -141,13 +141,13 @@ void all_primitives(float width, float height)
     od_draw_ring(renderer, cx, cy, radius, radius * .1f, miya_green);
     od_draw_text(renderer, cx-radius, cy-radius*1.25f, "ring", miya_brown);
 
-    // slot(width, height, 2, &cx, &cy, &radius);
-    // od_draw_box(renderer, cx - radius, cy - radius*.5f, cx + radius, cy + radius*.5f, radius * 0.05f, miya_grey);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "box", miya_brown);
+    slot(width, height, 2, &cx, &cy, &radius);
+    od_draw_box(renderer, cx - radius, cy - radius*.5f, cx + radius, cy + radius*.5f, radius * 0.05f, miya_grey);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "box", miya_brown);
 
-    // slot(width, height, 3, &cx, &cy, &radius);
-    // od_draw_blurred_box(renderer, cx, cy, radius*.5f, radius, radius * 0.1f, miya_black);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "blurred_box", miya_brown);
+    slot(width, height, 3, &cx, &cy, &radius);
+    od_draw_blurred_box(renderer, cx, cy, radius*.5f, radius, radius * 0.1f, miya_blue);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "blurred_box", miya_brown);
 
     slot(width, height, 4, &cx, &cy, &radius);
     od_draw_oriented_rect(renderer, cx - cosf(angle) * radius, cy - sinf(angle) * radius, cx + cosf(angle) * radius, cy + sinf(angle) * radius,
