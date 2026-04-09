@@ -179,12 +179,6 @@ void od_set_clear_color(struct onedraw* r, draw_color srgb_color);
 void od_set_cliprect(struct onedraw* r, float min_x, float min_y, float max_x, float max_y);
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// Sets the clip disc, you set a mixumum of 256 clip shapes per frame
-//      [cx, cy]        center of the disc
-//      [radius]        radius of the disc
-void od_set_clipdisc(struct onedraw* r, float cx, float cy, float radius);
-
-//-----------------------------------------------------------------------------------------------------------------------------
 // Outputs a blue color as the background of each tile. Mainly use to debug binning.
 void od_set_culling_debug(struct onedraw* r, bool b);
 

@@ -80,7 +80,7 @@
         TYPE* _ptr = (TYPE*)((db)->cpu_buffer);                        \
         _ptr[(db)->num_elements++] = (VALUE);                          \
     } while (0)
-
+#define DB_LAST(db, TYPE) ((TYPE*)((db)->cpu_buffer))[(db)->num_elements - 1]
 #define LAST_CLIP_INDEX (uint8_t)(r->commands.clipshapes.num_elements-1)
 
 static inline uint32_t min_u32(uint32_t a, uint32_t b) {return a < b ? a : b;}
@@ -1281,6 +1281,13 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 {
     assert_msg(r->commands.group_aabb == NULL, "begin/end group pair mismatch");
 
+    r->stats.peak_num_draw_cmd = OD_MAX(r->stats.peak_num_draw_cmd, (uint32_t)r->commands.list.num_elements);
+    r->stats.num_draw_data = (uint32_t)r->commands.float_data.num_elements;
+
+    uint32_t options = 0;
+    options |= r->tiles.culling_debug ? OPTION_DEBUG_BINNING : 0U;
+    options |= r->rasterizer.srgb_rendertarget ? OPTION_SRGB_BACKBUFFER : 0U;
+
     // global gpu args
     gpu_draw_args args =
     {
@@ -1291,7 +1298,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
         .max_nodes = DEFAULT_MAX_NODES,
         .num_tile_width = r->tiles.num_width,
         .num_tile_height = r->tiles.num_height,
-        .options = r->rasterizer.srgb_rendertarget ? OPTION_SRGB_BACKBUFFER : 0U
+        .options = options
     };
     DB_PUSH(&r->commands.draw_args, gpu_draw_args, args);
 
@@ -1416,6 +1423,7 @@ void od_terminate(struct onedraw* r)
 //----------------------------------------------------------------------------------------------------------------------------
 void od_get_stats(const struct onedraw* r, od_stats* stats)
 {
+    stats->peak_num_draw_cmd = r->stats.peak_num_draw_cmd;
     stats->frame_index = r->stats.frame_index;
     stats->gpu_memory_usage = dynamic_buffer_get_gpu_mem(&r->commands.aabb);
     stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.clipshapes);
@@ -1455,6 +1463,28 @@ void od_set_clear_color(struct onedraw* r, draw_color srgb_color)
         r->rasterizer.clear_color.z = b8;
         r->rasterizer.clear_color.w = a8;
     }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_set_cliprect(struct onedraw* r, float min_x, float min_y, float max_x, float max_y)
+{
+    if (max_x < min_x || max_y < min_y)
+        return;
+
+    // check if it's a new clip rect
+    vec4 current_clip = DB_LAST(&r->commands.clipshapes, vec4);
+    if (min_x == current_clip.x && min_y == current_clip.y &&
+        max_x == current_clip.z && max_y == current_clip.w)
+        return;
+
+    vec4 clip = (vec4) {min_x, min_y, max_x, max_y};
+    DB_PUSH(&r->commands.clipshapes, vec4, clip);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_set_culling_debug(struct onedraw* r, bool b)
+{
+    r->tiles.culling_debug = b;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------

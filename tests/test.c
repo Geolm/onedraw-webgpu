@@ -85,6 +85,20 @@ void cleanup(void)
     terminate_webgpu(&wgpu);
 }
 
+//----------------------------------------------------------------------------------------------------------------------------
+void key_cb(struct GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    (void)(window);
+    (void)(scancode);
+
+    static bool culling_debug = false;
+    if (key == GLFW_KEY_D && action == GLFW_PRESS && mods&GLFW_MOD_SUPER)
+    {
+        culling_debug = !culling_debug;
+        od_set_culling_debug(renderer, culling_debug);
+    }
+}
+
 //-----------------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
@@ -100,6 +114,8 @@ int main(int argc, char* argv[])
     window = glfwCreateWindow(1280, 720, "onedraw-webgpu", NULL, NULL);
     assert(window != NULL);
 
+    glfwSetKeyCallback(window, key_cb);
+
     init();
 
     while (!glfwWindowShouldClose(window))
@@ -111,6 +127,27 @@ int main(int argc, char* argv[])
     cleanup();
 
     return 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+static inline float float_rand(uint32_t *seed)
+{
+    union
+    {
+        uint32_t i;
+        float f;
+    } u;
+
+    // SplitMix32
+    *seed += 0x9e3779b9u;
+    uint64_t z = *seed;
+    z = (z ^ (z >> 15)) * 0x85ebca6bULL;
+    z = (z ^ (z >> 13)) * 0xc2b2ae35ULL;
+    z ^= z >> 16;
+
+    uint32_t mant = (uint32_t)(z >> 9) & 0x007FFFFFu;
+    u.i = mant | 0x3f800000u;
+    return u.f - 1.0f;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -241,31 +278,30 @@ void all_primitives(float width, float height)
     // od_end_group(renderer, miya_yellow);
     // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "outline", miya_brown);
 
-    // slot(width, height, 20, &cx, &cy, &radius);
-    // od_set_clipdisc(renderer, cx, cy, radius);
-    // int seed = 0x12345678;
-    // const uint32_t colors[] = {miya_green, miya_pale_blue, miya_yellow};
-    // for(uint32_t i=0; i<100; i++)
-    // {
-    //     float angle = iq_random_float(&seed) * 6.28f;
-    //     od_draw_capsule(renderer, cx, cy, cx + cosf(angle) * 1000.f, cy + sinf(angle) * 1000.f, radius * 0.1f, colors[i%3]);
-    // }
+    slot(width, height, 20, &cx, &cy, &radius);
+    od_set_cliprect(renderer, cx-radius, cy-radius, cx+radius, cy+radius);
+    uint32_t seed = 0x12345678;
+    const uint32_t colors[] = {miya_green, miya_pale_blue, miya_yellow};
+    for(uint32_t i=0; i<100; i++)
+    {
+        float angle = float_rand(&seed) * 6.28f;
+        od_draw_capsule(renderer, cx, cy, cx + cosf(angle) * 1000.f, cy + sinf(angle) * 1000.f, radius * 0.1f, colors[i%3]);
+    }
 
-    // od_set_cliprect(renderer, 0.f, 0.f, UINT16_MAX, UINT16_MAX);
-    // od_draw_text(renderer, cx-radius, cy-radius*1.25f, "disc clip", miya_brown);
+    od_set_cliprect(renderer, 0.f, 0.f, width, height);
+    od_draw_text(renderer, cx-radius, cy-radius*1.25f, "clip_rect", miya_brown);
 
     slot(width, height, 21, &cx, &cy, &radius);
     od_draw_capsule_gradient(renderer, cx - cosf(angle) * radius, cy - sinf(angle) * radius, cx + cosf(angle) * radius, cy + sinf(angle) * radius,
                              radius * 0.1f, miya_pale_blue, miya_red);
     od_draw_text(renderer, cx-radius, cy-radius*1.25f, "capsule_gradient", miya_brown);
 
-
     od_stats stats;
     od_get_stats(renderer, &stats);
     snprintf(string, 256, "GPU Memory usage : %zu kb", stats.gpu_memory_usage>>10);
     od_draw_text(renderer, 0, height - od_get_text_height(renderer) * 2.f, string, miya_blue);
 
-    // snprintf(string, 256, "num commands : %u", stats.peak_num_draw_cmd);
-    // od_draw_text(renderer, (sapp_widthf() - od_text_width(renderer, string)) * .5f,
-    //              sapp_heightf() - od_text_height(renderer) * 2.f, string, miya_blue);
+    snprintf(string, 256, "num commands : %u", stats.peak_num_draw_cmd);
+    od_draw_text(renderer, (width - od_get_text_width(renderer, string)),
+                            height - od_get_text_height(renderer) * 2.f, string, miya_blue);
 }
