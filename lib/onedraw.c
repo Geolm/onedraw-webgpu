@@ -1772,7 +1772,7 @@ void od_draw_sector(struct onedraw* r, float cx, float cy, float radius, float s
     vec2 center = {cx, cy};
     float aperture = sweep_angle * .5f;
     vec2 direction = vec2_direction(start_angle + aperture);
-    private_draw_pie(r, center, direction, radius, fabs(aperture), 0.f, fill_solid, srgb_color);
+    private_draw_pie(r, center, direction, radius, fabsf(aperture), 0.f, fill_solid, srgb_color);
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
@@ -1781,7 +1781,7 @@ void od_draw_sector_ring(struct onedraw* r, float cx, float cy, float radius, fl
     vec2 center = {cx, cy};
     float aperture = sweep_angle * .5f;
     vec2 direction = vec2_direction(start_angle + aperture);
-    private_draw_pie(r, center, direction, radius, fabs(aperture), thickness, fill_hollow, srgb_color);
+    private_draw_pie(r, center, direction, radius, fabsf(aperture), thickness, fill_hollow, srgb_color);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
