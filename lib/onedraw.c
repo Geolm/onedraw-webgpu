@@ -176,6 +176,7 @@ struct onedraw
     struct 
     {
         WGPUTexture texture;
+        WGPUTextureFormat format;
         WGPUTextureView view;
         WGPUSampler sampler;
         uint32_t num_slices;
@@ -1075,10 +1076,14 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
         r->atlas.num_slices = 1;
         r->atlas.width = 1;
         r->atlas.height = 1;
+        r->atlas.format = WGPUTextureFormat_RGBA8Unorm;
     }
     else
     {
-        assert_msg(false, "to be implemented");
+        r->atlas.width = def->atlas.width;
+        r->atlas.height = def->atlas.height;
+        r->atlas.num_slices = def->atlas.num_slices;
+        r->atlas.format = def->atlas.format;
     }
 
     WGPUTextureDescriptor atlas_desc = 
@@ -1087,7 +1092,7 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
         .mipLevelCount = 1,
         .sampleCount = 1,
         .dimension = WGPUTextureDimension_2D,
-        .format = WGPUTextureFormat_RGBA8Unorm,
+        .format = r->atlas.format,
         .usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst,
     };
 
@@ -1097,7 +1102,7 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
     r->atlas.view = wgpuTextureCreateView(r->atlas.texture, &(WGPUTextureViewDescriptor)
     {
         .label = WGPU_STRING_VIEW("atlas texture view"),
-        .format = WGPUTextureFormat_RGBA8Unorm,
+        .format = r->atlas.format,
         .dimension = WGPUTextureViewDimension_2DArray,
         .mipLevelCount = 1,
         .arrayLayerCount = r->atlas.num_slices,

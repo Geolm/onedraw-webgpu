@@ -48,7 +48,14 @@ void init(void)
         .viewport_width = width,
         .viewport_height = height,
         .srgb_rendertarget = true,
-        .surface_format = g_wgpu.surface_cfg.format
+        .surface_format = g_wgpu.surface_cfg.format,
+        .atlas = 
+        {
+            .format = WGPUTextureFormat_RGBA8Unorm,
+            .height = 256,
+            .width = 256,
+            .num_slices = 4
+        }
     });
 
     od_set_clear_color(g_renderer, miya_white);
