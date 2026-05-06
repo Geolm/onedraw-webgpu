@@ -182,6 +182,7 @@ struct onedraw
         uint32_t num_slices;
         uint32_t width;
         uint32_t height;
+        uint32_t bytes_per_pixel;
     } atlas;
 
     // font
@@ -1068,6 +1069,97 @@ void build_font(struct onedraw* r)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
+uint32_t wgpu_texture_format_bytes_per_pixel(WGPUTextureFormat format)
+{
+    switch (format)
+    {
+        // 8-bit single channel
+        case WGPUTextureFormat_R8Unorm:
+        case WGPUTextureFormat_R8Snorm:
+        case WGPUTextureFormat_R8Uint:
+        case WGPUTextureFormat_R8Sint:
+            return 1;
+
+        // 16-bit single channel / 8-bit dual channel
+        case WGPUTextureFormat_R16Uint:
+        case WGPUTextureFormat_R16Sint:
+        case WGPUTextureFormat_R16Float:
+        case WGPUTextureFormat_RG8Unorm:
+        case WGPUTextureFormat_RG8Snorm:
+        case WGPUTextureFormat_RG8Uint:
+        case WGPUTextureFormat_RG8Sint:
+            return 2;
+
+        // 32-bit formats
+        case WGPUTextureFormat_R32Float:
+        case WGPUTextureFormat_R32Uint:
+        case WGPUTextureFormat_R32Sint:
+        case WGPUTextureFormat_RG16Uint:
+        case WGPUTextureFormat_RG16Sint:
+        case WGPUTextureFormat_RG16Float:
+        case WGPUTextureFormat_RGBA8Unorm:
+        case WGPUTextureFormat_RGBA8UnormSrgb:
+        case WGPUTextureFormat_RGBA8Snorm:
+        case WGPUTextureFormat_RGBA8Uint:
+        case WGPUTextureFormat_RGBA8Sint:
+        case WGPUTextureFormat_BGRA8Unorm:
+        case WGPUTextureFormat_BGRA8UnormSrgb:
+        case WGPUTextureFormat_RGB10A2Uint:
+        case WGPUTextureFormat_RGB10A2Unorm:
+        case WGPUTextureFormat_RG11B10Ufloat:
+            return 4;
+
+        // 64-bit formats
+        case WGPUTextureFormat_RG32Float:
+        case WGPUTextureFormat_RG32Uint:
+        case WGPUTextureFormat_RG32Sint:
+        case WGPUTextureFormat_RGBA16Uint:
+        case WGPUTextureFormat_RGBA16Sint:
+        case WGPUTextureFormat_RGBA16Float:
+            return 8;
+
+        // 128-bit formats
+        case WGPUTextureFormat_RGBA32Float:
+        case WGPUTextureFormat_RGBA32Uint:
+        case WGPUTextureFormat_RGBA32Sint:
+            return 16;
+
+        // Depth/stencil
+        case WGPUTextureFormat_Depth16Unorm:
+            return 2;
+
+        case WGPUTextureFormat_Depth24Plus:
+        case WGPUTextureFormat_Depth24PlusStencil8:
+        case WGPUTextureFormat_Depth32Float:
+            return 4;
+
+        // BC compressed formats (block-compressed, 4x4 blocks)
+        // Returned value is bytes per block, NOT bytes per pixel.
+        case WGPUTextureFormat_BC1RGBAUnorm:
+        case WGPUTextureFormat_BC1RGBAUnormSrgb:
+        case WGPUTextureFormat_BC4RUnorm:
+        case WGPUTextureFormat_BC4RSnorm:
+            return 8;
+
+        case WGPUTextureFormat_BC2RGBAUnorm:
+        case WGPUTextureFormat_BC2RGBAUnormSrgb:
+        case WGPUTextureFormat_BC3RGBAUnorm:
+        case WGPUTextureFormat_BC3RGBAUnormSrgb:
+        case WGPUTextureFormat_BC5RGUnorm:
+        case WGPUTextureFormat_BC5RGSnorm:
+        case WGPUTextureFormat_BC6HRGBUfloat:
+        case WGPUTextureFormat_BC6HRGBFloat:
+        case WGPUTextureFormat_BC7RGBAUnorm:
+        case WGPUTextureFormat_BC7RGBAUnormSrgb:
+            return 16;
+
+        default:
+            assert_msg(false, "Unsupported or unknown texture format");
+            return 0;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 void create_atlas(struct onedraw* r, const onedraw_def* def)
 {
     // create a dummy if not needed to please the bind group
@@ -1085,6 +1177,8 @@ void create_atlas(struct onedraw* r, const onedraw_def* def)
         r->atlas.num_slices = def->atlas.num_slices;
         r->atlas.format = def->atlas.format;
     }
+
+    r->atlas.bytes_per_pixel = wgpu_texture_format_bytes_per_pixel(r->atlas.format);
 
     WGPUTextureDescriptor atlas_desc = 
     {
@@ -1224,10 +1318,33 @@ struct onedraw* od_init(const onedraw_def* def)
 //-----------------------------------------------------------------------------------------------------------------------------
 void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_index)
 {
-    UNUSED_VARIABLE(r);
-    UNUSED_VARIABLE(pixel_data);
-    UNUSED_VARIABLE(slice_index);
-    assert_msg(0, "not yet implemented");
+    assert(slice_index < r->atlas.num_slices);
+
+    WGPUTexelCopyTextureInfo dst =
+    {
+        .texture = r->atlas.texture,
+        .mipLevel = 0,
+        .origin = (WGPUOrigin3D){0, 0, slice_index}, // array layer
+        .aspect = WGPUTextureAspect_All,
+    };
+
+    WGPUTexelCopyBufferLayout layout =
+    {
+        .offset = 0,
+        .bytesPerRow = r->atlas.width * r->atlas.bytes_per_pixel,
+        .rowsPerImage = r->atlas.height
+    };
+
+    WGPUExtent3D write_size =
+    {
+        .width = r->atlas.width,
+        .height = r->atlas.height,
+        .depthOrArrayLayers = 1,
+    };
+
+    uint32_t data_size = r->atlas.width * r->atlas.height * r->atlas.bytes_per_pixel;
+
+    wgpuQueueWriteTexture(r->queue, &dst, pixel_data, data_size, &layout, &write_size);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
