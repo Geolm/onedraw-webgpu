@@ -334,16 +334,16 @@ void all_primitives(float width, float height)
     // od_end_group(g_renderer, miya_brown);
     // od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "smoothmin", miya_brown);
 
-    // slot(width, height, 15, &cx, &cy, &radius);
-    // od_draw_quad(g_renderer, cx-radius, cy-radius, cx, cy, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 0, 0x7fffffff);
-    // od_draw_quad(g_renderer, cx, cy-radius, cx+radius, cy, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 1, 0xffffffff);
-    // od_draw_quad(g_renderer, cx-radius, cy, cx, cy+radius, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 2, 0xffffffff);
-    // od_draw_quad(g_renderer, cx, cy, cx+radius, cy+radius, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 3, 0xffffffff);
-    // od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "quad", miya_brown);
+    slot(width, height, 15, &cx, &cy, &radius);
+    od_draw_quad(g_renderer, cx-radius, cy-radius, cx, cy, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 0, 0x7fffffff);
+    od_draw_quad(g_renderer, cx, cy-radius, cx+radius, cy, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 1, 0xffffffff);
+    od_draw_quad(g_renderer, cx-radius, cy, cx, cy+radius, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 2, 0xffffffff);
+    od_draw_quad(g_renderer, cx, cy, cx+radius, cy+radius, (od_quad_uv){0.f, 0.f, 1.f, 1.f}, 3, 0xffffffff);
+    od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "quad", miya_brown);
 
-    // slot(width, height, 16, &cx, &cy, &radius);
-    // od_draw_oriented_quad(g_renderer, cx, cy, radius, radius*.5f, g_angle * 0.75f, (od_quad_uv){0.f, 0.f, 1.f, 0.5f}, 2, 0xffffffff);
-    // od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "oriented_quad", miya_brown);
+    slot(width, height, 16, &cx, &cy, &radius);
+    od_draw_oriented_quad(g_renderer, cx, cy, radius, radius*.5f, g_angle * 0.75f, (od_quad_uv){0.f, 0.f, 1.f, 0.5f}, 2, 0xffffffff);
+    od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "oriented_quad", miya_brown);
 
     slot(width, height, 17, &cx, &cy, &radius);
     float quadratic_ctrl_pts[] = {cx, cy-radius*.8f, cx-radius, cy+radius*0.8f, cx, cy+radius};

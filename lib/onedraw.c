@@ -80,6 +80,17 @@
         TYPE* _ptr = (TYPE*)((db)->cpu_buffer);                        \
         _ptr[(db)->num_elements++] = (VALUE);                          \
     } while (0)
+
+#define DB_PUSH_ARRAY(db, TYPE, ...)                                              \
+    do {                                                                           \
+        const TYPE _tmp[] = { __VA_ARGS__ };                                       \
+        uint32_t _count = (uint32_t)(sizeof(_tmp) / sizeof(_tmp[0]));              \
+        assert((db)->element_size == sizeof(TYPE));                                \
+        assert((db)->num_elements + _count <= (db)->num_elements_max);             \
+        TYPE* _dst = (TYPE*)((db)->cpu_buffer);                                    \
+        memcpy(&_dst[(db)->num_elements], _tmp, sizeof(_tmp));                     \
+        (db)->num_elements += _count;                                              \
+    } while (0)
 #define DB_LAST(db, TYPE) ((TYPE*)((db)->cpu_buffer))[(db)->num_elements - 1]
 #define LAST_CLIP_INDEX (uint8_t)(r->commands.clipshapes.num_elements-1)
 
@@ -1627,9 +1638,7 @@ void private_draw_disc(struct onedraw* r, vec2 center, float radius, float thick
 
     float max_radius = radius + draw_cmd_aabb_bump(r);
 
-    DB_PUSH(&r->commands.float_data, float, center.x);
-    DB_PUSH(&r->commands.float_data, float, center.y);
-    DB_PUSH(&r->commands.float_data, float, radius);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, center.x, center.y, radius);
 
     if (fillmode == fill_hollow)
     {
@@ -1704,12 +1713,7 @@ void private_draw_oriented_box(struct onedraw* r, vec2 p0, vec2 p1, float width,
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_oriented_box);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, primary_color);
-    DB_PUSH(&r->commands.float_data, float, p0.x);
-    DB_PUSH(&r->commands.float_data, float, p0.y);
-    DB_PUSH(&r->commands.float_data, float, p1.x);
-    DB_PUSH(&r->commands.float_data, float, p1.y);
-    DB_PUSH(&r->commands.float_data, float, width);
-    DB_PUSH(&r->commands.float_data, float, roundness_thickness);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, p0.x, p0.y, p1.x, p1.y, width, roundness_thickness);
 
     if (fillmode == fill_gradient)
     {
@@ -1776,11 +1780,7 @@ void private_draw_ellipse(struct onedraw* r, vec2 p0, vec2 p1, float width, floa
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_ellipse);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, p0.x);
-    DB_PUSH(&r->commands.float_data, float, p0.y);
-    DB_PUSH(&r->commands.float_data, float, p1.x);
-    DB_PUSH(&r->commands.float_data, float, p1.y);
-    DB_PUSH(&r->commands.float_data, float, width);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, p0.x, p0.y, p1.x, p1.y, width);
 
     if (fillmode == fill_hollow)
     {
@@ -1870,13 +1870,7 @@ void private_draw_pie(struct onedraw* r, vec2 center, vec2 direction, float radi
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fillmode, primitive_pie);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, center.x);
-    DB_PUSH(&r->commands.float_data, float, center.y);
-    DB_PUSH(&r->commands.float_data, float, radius);
-    DB_PUSH(&r->commands.float_data, float, direction.x);
-    DB_PUSH(&r->commands.float_data, float, direction.y);
-    DB_PUSH(&r->commands.float_data, float, sinf(aperture));
-    DB_PUSH(&r->commands.float_data, float, cosf(aperture));
+    DB_PUSH_ARRAY(&r->commands.float_data, float, center.x, center.y, radius, direction.x, direction.y, sinf(aperture), cosf(aperture));
 
     if (fillmode == fill_hollow)
     {
@@ -1926,14 +1920,7 @@ void od_draw_arc(struct onedraw* r, float cx, float cy, float dx, float dy, floa
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_arc);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, center.x);
-    DB_PUSH(&r->commands.float_data, float, center.y);
-    DB_PUSH(&r->commands.float_data, float, radius);
-    DB_PUSH(&r->commands.float_data, float, direction.x);
-    DB_PUSH(&r->commands.float_data, float, direction.y);
-    DB_PUSH(&r->commands.float_data, float, sinf(aperture));
-    DB_PUSH(&r->commands.float_data, float, cosf(aperture));
-    DB_PUSH(&r->commands.float_data, float, thickness);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, center.x, center.y, radius, direction.x, direction.y, sinf(aperture), cosf(aperture), thickness);
 
     quantized_aabb quantized_bb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
     merge_quantized_aabb(r->commands.group_aabb, &quantized_bb);
@@ -1961,11 +1948,7 @@ void od_draw_box(struct onedraw* r, float x0, float y0, float x1, float y1, floa
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_aabox);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, center.x);
-    DB_PUSH(&r->commands.float_data, float, center.y);
-    DB_PUSH(&r->commands.float_data, float, half_extents.x);
-    DB_PUSH(&r->commands.float_data, float, half_extents.y);
-    DB_PUSH(&r->commands.float_data, float, radius);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, center.x, center.y, half_extents.x, half_extents.y, radius);
 
     aabb_grow(&box, vec2_splat(draw_cmd_aabb_bump(r)));
     quantized_aabb quantized_box = quantized_aabb_make(box.min.x, box.min.y, box.max.x, box.max.y);
@@ -1988,11 +1971,7 @@ void od_draw_blurred_box(struct onedraw* r, float cx, float cy, float width, flo
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, 0, LAST_CLIP_INDEX, fill_solid, primitive_blurred_box);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, cx);
-    DB_PUSH(&r->commands.float_data, float, cy);
-    DB_PUSH(&r->commands.float_data, float, half_width);
-    DB_PUSH(&r->commands.float_data, float, half_height);
-    DB_PUSH(&r->commands.float_data, float, roundness);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, cx, cy, half_width, half_height, roundness);
 
     aabb box =
     {
@@ -2027,8 +2006,7 @@ void od_draw_char(struct onedraw* r, float x, float y, char c, draw_color srgb_c
     gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) glyph_index, LAST_CLIP_INDEX, fill_solid, primitive_char);
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, srgb_color);
-    DB_PUSH(&r->commands.float_data, float, x);
-    DB_PUSH(&r->commands.float_data, float, y);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, x, y);
 
     quantized_aabb aabb = quantized_aabb_make(x, y, x + glyph_width, y + glyph_height);
     merge_quantized_aabb(r->commands.group_aabb, &aabb);
@@ -2058,16 +2036,57 @@ void od_draw_text(struct onedraw* r, float x, float y, const char* text, draw_co
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_quad(struct onedraw* r, float x0, float y0, float x1, float y1, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
-// {
+void od_draw_quad(struct onedraw* r, float x0, float y0, float x1, float y1, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
+{
+    assert_msg(slice_index < r->atlas.num_slices, "slice index out of bound");
 
-// }
+    if (fabsf(x0 - x1) < HALF_PIXEL || fabsf(y0 - y1) < HALF_PIXEL)
+        return;
+
+    if (buffers_are_full(r, 8))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) slice_index, LAST_CLIP_INDEX, fill_solid, primitive_quad);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, x0, y0, x1, y1, uv.u0, uv.v0, uv.u1, uv.v1);
+
+    quantized_aabb aabb = quantized_aabb_make(x0, y0, x1, y1);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// void od_draw_oriented_quad(struct onedraw* r, float cx, float cy, float width, float height, float angle, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
-// {
+void od_draw_oriented_quad(struct onedraw* r, float cx, float cy, float width, float height, float angle, od_quad_uv uv, uint32_t slice_index, draw_color srgb_color)
+{
+    if (width < HALF_PIXEL || height < HALF_PIXEL)
+        return;
 
-// }
+    if (buffers_are_full(r, 8))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    vec2 center = {cx, cy};
+    vec2 axis = vec2_direction(angle);
+    vec2 dir = vec2_scale(axis, width*.5f);
+    vec2 p0 = vec2_sub(center, dir);
+    vec2 p1 = vec2_add(center, dir);
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) slice_index, LAST_CLIP_INDEX, fill_solid, primitive_oriented_quad);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, srgb_color);
+    DB_PUSH_ARRAY(&r->commands.float_data, float, cx, cy, 1.f/width, 1.f/height, axis.x, axis.y, uv.u0, uv.v0, uv.u1, uv.v1);
+
+    aabb bb = aabb_from_rounded_obb(p0, p1, height, 0.f);
+    quantized_aabb aabb = quantized_aabb_make(bb.min.x, bb.min.y, bb.max.x, bb.max.y);
+    merge_quantized_aabb(r->commands.group_aabb, &aabb);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, aabb);
+}
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Breaks the bezier quadratic curve into multiple capsules, using De Casteljau’s algorithm and colinear detection
