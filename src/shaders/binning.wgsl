@@ -499,6 +499,16 @@ fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f3
                 intersection = false;
             }
         }
+        case PRIMITIVE_ORIENTED_QUAD:
+        {
+            let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);
+            let dimensions = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);
+            let axis = vec2<f32>(g_draw_data[data_idx + 4u], g_draw_data[data_idx + 5u]);
+            let dir = axis * .5f/dimensions.x;
+            let p0 = center + dir;
+            let p1 = center - dir;
+            intersection = intersection_aabb_obb(tile_aabb, p0, p1, 1.f/dimensions.y);
+        }
         default:
         {
             intersection = true;

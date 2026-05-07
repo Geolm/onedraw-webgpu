@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 26075;
+static const size_t binning_shader_size = 26615;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -701,6 +701,16 @@ static const char binning_shader[] =
     "            {\n"
     "                intersection = false;\n"
     "            }\n"
+    "        }\n"
+    "        case PRIMITIVE_ORIENTED_QUAD:\n"
+    "        {\n"
+    "            let center = vec2<f32>(g_draw_data[data_idx + 0u], g_draw_data[data_idx + 1u]);\n"
+    "            let dimensions = vec2<f32>(g_draw_data[data_idx + 2u], g_draw_data[data_idx + 3u]);\n"
+    "            let axis = vec2<f32>(g_draw_data[data_idx + 4u], g_draw_data[data_idx + 5u]);\n"
+    "            let dir = axis * .5f/dimensions.x;\n"
+    "            let p0 = center + dir;\n"
+    "            let p1 = center - dir;\n"
+    "            intersection = intersection_aabb_obb(tile_aabb, p0, p1, 1.f/dimensions.y);\n"
     "        }\n"
     "        default:\n"
     "        {\n"
