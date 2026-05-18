@@ -31,7 +31,10 @@ void* read_file(const char* filename, size_t* file_size, Arena* arena)
 
         void* buffer = arena_alloc(arena, (*file_size));
         if (fread(buffer, *file_size, 1, f) == 1)
+        {
+            fclose(f);
             return buffer;
+        }
     }
     return NULL;
 }
@@ -39,7 +42,7 @@ void* read_file(const char* filename, size_t* file_size, Arena* arena)
 //----------------------------------------------------------------------------------------------------------------------------
 char* read_shader(const char* filename, size_t* string_size, Arena* arena)
 {
-    FILE* f = fopen(filename, "r");
+    FILE* f = fopen(filename, "rb");
     if (f != NULL)
     {
         fseek(f, 0, SEEK_END);
