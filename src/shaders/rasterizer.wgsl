@@ -50,6 +50,25 @@ var<storage, read> g_colors: array<u32>;
 // Signed distance functions
 // ---------------------------------------------------------------------------------------------------------------------------
 
+fn op_union(lhs: f32, rhs: f32) -> vec2<f32> 
+{
+    // previous color is always overwritten by new one in case of overlap
+    var a = rhs;
+    var b = max(lhs, 0.0);
+
+    return vec2<f32>(min(a, b), select(1.0, 0.0, a < b));
+}
+
+fn op_subtraction(lhs: f32, rhs: f32) -> f32
+{
+    return max(-rhs, lhs);
+}
+
+fn op_intersection(lhs: f32, rhs: f32) -> f32
+{
+    return max(lhs, rhs);
+}
+
 fn erf_approx(x: f32) -> f32 
 {
     return sign(x) * sqrt(1.0 - exp2(-1.787776 * x * x));
@@ -87,30 +106,6 @@ fn sd_segment(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32
     let ba = b - a;
     let h = saturate(dot(pa, ba) / dot(ba, ba));
     return length(pa - ba * h);
-}
-
-fn smooth_minimum(a_in: f32, b_in: f32, k: f32) -> vec2<f32> 
-{
-    var a = a_in;
-    var b = max(b_in, 0.0);
-
-    if (k > 0.0) 
-    {
-        let h = max(k - abs(a - b), 0.0) / k;
-        let m = h * h * h * 0.5;
-        let s = m * k * (1.0 / 3.0);
-
-        if (a < b) 
-        {
-            return vec2<f32>(a - s, 0.0);
-        } 
-        else 
-        {
-            return vec2<f32>(b - s, 1.0 - linearstep(-k, 0.0, b - a));
-        }
-    }
-
-    return vec2<f32>(min(a, b), select(1.0, 0.0, a < b));
 }
 
 fn sd_triangle(p: vec2<f32>, p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>) -> f32 
@@ -275,8 +270,9 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
     var previous_distance: f32 = 1e8;
     var previous_color: vec4<f32> = vec4<f32>(0.0);
     var group_smoothness: f32 = 0.0;
-    var group_op: u32 = OP_OVERWRITE;
+    var group_op: u32 = OP_UNION;
     var grouping: bool = false;
+    var grouping_primitive_idx: u32 = 0;
     var outline_width: f32 = 0.0;
 
     while (node_idx != INVALID_INDEX)
@@ -486,7 +482,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                     grouping = false;
                     final_color = previous_color;
                     distance = previous_distance;
-                    group_op = OP_OVERWRITE;
+                    group_op = OP_UNION;
                 }
                 else
                 {
@@ -495,8 +491,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
 
                 if (grouping)
                 {
-                    let smooth_factor = select(g_draw_args.aa_width, group_smoothness, group_op == OP_BLEND);
-                    let res = smooth_minimum(distance, previous_distance, smooth_factor);
+                    let res = op_union(previous_distance, distance);
                     previous_distance = res.x;
                     previous_color = mix(final_color, previous_color, res.y);
                 }
