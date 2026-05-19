@@ -272,7 +272,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
     var group_smoothness: f32 = 0.0;
     var group_op: u32 = OP_UNION;
     var grouping: bool = false;
-    var grouping_primitive_idx: u32 = 0;
+    var group_first_primitive: bool = false;
     var outline_width: f32 = 0.0;
 
     while (node_idx != INVALID_INDEX)
@@ -304,6 +304,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                 previous_distance = 1e8;
                 group_smoothness = g_draw_data[data_idx + 0u];
                 grouping = true;
+                group_first_primitive = true;
                 group_op = extra;
                 outline_width = g_draw_data[data_idx + 1u];
             }
@@ -482,7 +483,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                     grouping = false;
                     final_color = previous_color;
                     distance = previous_distance;
-                    group_op = OP_UNION;
                 }
                 else
                 {
@@ -491,9 +491,34 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
 
                 if (grouping)
                 {
-                    let res = op_union(previous_distance, distance);
-                    previous_distance = res.x;
-                    previous_color = mix(final_color, previous_color, res.y);
+                    // first primitive in the group just set the initial distance/color
+                    if (group_first_primitive)
+                    {
+                        previous_distance = distance;
+                        previous_color = final_color;
+                        group_first_primitive = false;
+                    }
+                    else
+                    {
+                        switch(group_op)
+                        {
+                            case OP_UNION:
+                            {
+                                let res = op_union(previous_distance, distance);
+                                previous_distance = res.x;
+                                previous_color = mix(final_color, previous_color, res.y);
+                            }
+                            case OP_SUBTRACTION:
+                            {
+                                previous_distance = op_subtraction(previous_distance, distance);
+                            }
+                            case OP_INTERSECTION:
+                            {
+                                previous_distance = op_intersection(previous_distance, distance);
+                            }
+                            default: {previous_distance = 1e8;}
+                        }
+                    }
                 }
                 else
                 {
