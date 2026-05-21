@@ -364,7 +364,7 @@ void all_primitives(float width, float height)
     od_draw_text(g_renderer, cx-radius, cy+radius*1.25f, string, miya_brown);
 
     slot(width, height, 19, &cx, &cy, &radius);
-    od_begin_group(g_renderer, op_union, 0.f);
+    od_begin_group(g_renderer, op_union, 10.f);
     od_draw_box(g_renderer, cx-radius, cy-radius*.25f, cx+radius, cy+radius*.25f, 0.f, miya_blue);
     od_draw_disc(g_renderer, cx-radius*.5f, cy, radius*.3f, miya_dark_green);
     od_draw_sector(g_renderer, cx, cy, radius, g_angle, 0.78539816f, miya_pink);

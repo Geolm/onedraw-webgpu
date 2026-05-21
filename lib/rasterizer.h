@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 27126;
+static const size_t rasterizer_shader_size = 26970;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -473,7 +473,6 @@ static const char rasterizer_shader[] =
     "\n"
     "    var previous_distance: f32 = 1e8;\n"
     "    var previous_color: vec4<f32> = vec4<f32>(0.0);\n"
-    "    var group_smoothness: f32 = 0.0;\n"
     "    var group_op: u32 = OP_UNION;\n"
     "    var grouping: bool = false;\n"
     "    var group_first_primitive: bool = false;\n"
@@ -485,7 +484,7 @@ static const char rasterizer_shader[] =
     "        let cmd_idx = get_command_index(node);\n"
     "        let cmd = g_commands[cmd_idx];\n"
     "        \n"
-    "        // Extract info using your helpers\n"
+    "        // extract info using your helpers\n"
     "        let cmd_type = get_type(cmd);\n"
     "        let fillmode = get_fillmode(cmd);\n"
     "        let extra    = get_extra(cmd);\n"
@@ -496,7 +495,7 @@ static const char rasterizer_shader[] =
     "        var cmd_color: vec4<f32> = srgb_to_linear(unpack4x8unorm(g_colors[cmd_idx]));\n"
     "\n"
     "        let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || \n"
-    "                                in.pos.x > clip.max_x || in.pos.y > clip.max_y);\n"
+    "                       in.pos.x > clip.max_x || in.pos.y > clip.max_y);\n"
     "\n"
     "        if (!clipped)\n"
     "        {\n"
@@ -506,11 +505,10 @@ static const char rasterizer_shader[] =
     "            {\n"
     "                previous_color = vec4<f32>(0.0);\n"
     "                previous_distance = 1e8;\n"
-    "                group_smoothness = g_draw_data[data_idx + 0u];\n"
     "                grouping = true;\n"
     "                group_first_primitive = true;\n"
     "                group_op = extra;\n"
-    "                outline_width = g_draw_data[data_idx + 1u];\n"
+    "                outline_width = g_draw_data[data_idx];\n"
     "            }\n"
     "            else\n"
     "            {\n"
@@ -677,7 +675,6 @@ static const char rasterizer_shader[] =
     "                            distance = abs(distance) - g_draw_data[data_idx + 7u];\n"
     "                        }\n"
     "                    }\n"
-    "                    // TODO : other cases\n"
     "                    default: { distance = 1e8; }\n"
     "                }\n"
     "\n"

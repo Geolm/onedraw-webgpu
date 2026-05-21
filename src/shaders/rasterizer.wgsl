@@ -269,7 +269,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
 
     var previous_distance: f32 = 1e8;
     var previous_color: vec4<f32> = vec4<f32>(0.0);
-    var group_smoothness: f32 = 0.0;
     var group_op: u32 = OP_UNION;
     var grouping: bool = false;
     var group_first_primitive: bool = false;
@@ -281,7 +280,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         let cmd_idx = get_command_index(node);
         let cmd = g_commands[cmd_idx];
         
-        // Extract info using your helpers
+        // extract info using your helpers
         let cmd_type = get_type(cmd);
         let fillmode = get_fillmode(cmd);
         let extra    = get_extra(cmd);
@@ -292,7 +291,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
         var cmd_color: vec4<f32> = srgb_to_linear(unpack4x8unorm(g_colors[cmd_idx]));
 
         let clipped = (in.pos.x < clip.min_x || in.pos.y < clip.min_y || 
-                                in.pos.x > clip.max_x || in.pos.y > clip.max_y);
+                       in.pos.x > clip.max_x || in.pos.y > clip.max_y);
 
         if (!clipped)
         {
@@ -302,11 +301,10 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
             {
                 previous_color = vec4<f32>(0.0);
                 previous_distance = 1e8;
-                group_smoothness = g_draw_data[data_idx + 0u];
                 grouping = true;
                 group_first_primitive = true;
                 group_op = extra;
-                outline_width = g_draw_data[data_idx + 1u];
+                outline_width = g_draw_data[data_idx];
             }
             else
             {
@@ -473,7 +471,6 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                             distance = abs(distance) - g_draw_data[data_idx + 7u];
                         }
                     }
-                    // TODO : other cases
                     default: { distance = 1e8; }
                 }
 
