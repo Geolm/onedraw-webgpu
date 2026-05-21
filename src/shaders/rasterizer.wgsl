@@ -211,7 +211,8 @@ fn sd_oriented_arc(position_in: vec2<f32>, center: vec2<f32>, direction_in: vec2
     p.x = abs(p.x);
     
     // Rotate by aperture matrix
-    p = vec2<f32>(-aperture.y * p.x - aperture.x * p.y,aperture.x * p.x - aperture.y * p.y);
+    let aperture_rot = mat2x2<f32>(vec2<f32>(aperture.y, aperture.x),vec2<f32>(-aperture.x, aperture.y));
+    p = aperture_rot * p;
     
     let half_thick = thickness * 0.5;
     let d1 = abs(length(p) - radius) - half_thick;

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 27098;
+static const size_t rasterizer_shader_size = 27137;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -415,7 +415,8 @@ static const char rasterizer_shader[] =
     "    p.x = abs(p.x);\n"
     "    \n"
     "    // Rotate by aperture matrix\n"
-    "    p = vec2<f32>(-aperture.y * p.x - aperture.x * p.y,aperture.x * p.x - aperture.y * p.y);\n"
+    "    let aperture_rot = mat2x2<f32>(vec2<f32>(aperture.y, aperture.x),vec2<f32>(-aperture.x, aperture.y));\n"
+    "    p = aperture_rot * p;\n"
     "    \n"
     "    let half_thick = thickness * 0.5;\n"
     "    let d1 = abs(length(p) - radius) - half_thick;\n"
