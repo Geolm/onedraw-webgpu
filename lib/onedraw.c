@@ -115,7 +115,6 @@ static inline float max_f32(float a, float b) {return a > b ? a : b;}
 
 typedef struct {float x, y, z, w;} vec4;
 typedef uint32_t quantized_aabb;
-typedef enum sdf_operator {op_additive, op_subtractive} sdf_operator;
 
 typedef struct dynamic_buffer
 {
@@ -178,7 +177,7 @@ struct onedraw
         uint32_t width;
         uint32_t height;
         float aa_width;
-        sdf_operator group_op;
+        od_operation group_op;
         float outline_width;
         bool srgb_rendertarget;
         bool clear_rendertarget;
@@ -1618,6 +1617,57 @@ void od_set_cliprect(struct onedraw* r, float min_x, float min_y, float max_x, f
 void od_set_culling_debug(struct onedraw* r, bool b)
 {
     r->tiles.culling_debug = b;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_begin_group(struct onedraw* r, od_operation op, float outline_width)
+{
+    assert_msg(r->commands.group_aabb == NULL, "can't begin new group while previous one not ended");
+
+    if (buffers_are_full(r, 1))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) op, LAST_CLIP_INDEX, fill_solid, begin_group);
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, 0U);
+    DB_PUSH(&r->commands.float_data, float, outline_width);
+
+    r->rasterizer.outline_width = outline_width;
+    r->rasterizer.group_op = op;
+
+    // reset the aabb that we're going to update depending on the coming shapes
+    r->commands.group_aabb = &((quantized_aabb*)r->commands.aabb.cpu_buffer)[r->commands.aabb.num_elements++];
+    *r->commands.group_aabb = invalid_quantized_aabb();
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void od_end_group(struct onedraw* r, draw_color outline_color)
+{
+    assert_msg(r->commands.group_aabb != NULL, "forgot to call od_begin_group?");
+
+    if (buffers_are_full(r, 0))
+    {
+        od_log(r, "buffers for primitive are full, expect graphical artefacts");
+        return;
+    }
+
+    gpu_draw_command cmd = gpu_draw_command_make(
+        r->commands.float_data.num_elements,
+        (uint8_t) r->rasterizer.group_op,
+        LAST_CLIP_INDEX,
+        (r->rasterizer.outline_width > 0.f) ? fill_outline : fill_solid,
+        end_group
+    );
+
+    DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
+    DB_PUSH(&r->commands.colors, draw_color, outline_color);
+    DB_PUSH(&r->commands.aabb, quantized_aabb, *r->commands.group_aabb);
+
+    r->commands.group_aabb = NULL;
+    r->rasterizer.outline_width = 0.f;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------

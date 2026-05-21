@@ -47,6 +47,13 @@
 
 struct onedraw;
 
+typedef enum od_operation
+{
+    op_union,
+    op_subtraction,
+    op_intersection
+} od_operation;
+
 typedef struct od_quad_uv
 {
     float u0, v0;   // top-left uv
@@ -185,10 +192,9 @@ void od_set_culling_debug(struct onedraw* r, bool b);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Begins a group
-//      [smoothblend]       if true, [smooth_value] will be used for smoothmin
-//      [smooth_value]      >= 0.f
+//      [op]                operation between primitives within the group
 //      [outline_width]     if equals to zero = no outline
-void od_begin_group(struct onedraw* r, bool smoothblend, float smooth_value, float outline_width);
+void od_begin_group(struct onedraw* r, od_operation op, float outline_width);
 
 //-----------------------------------------------------------------------------------------------------------------------------
 //  Ends a group
