@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 27816;
+static const size_t binning_shader_size = 27847;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -853,12 +853,13 @@ static const char binning_shader[] =
     "        }\n"
     "    }\n"
     "\n"
-    "    // Write final head to global buffer\n"
+    "    // write final head to global buffer\n"
     "    g_tile_heads[tile_index] = current_head;\n"
     "\n"
+    "    // remove empty groups\n"
     "    clean_list(tile_index);\n"
     "\n"
-    "    // If tile is not empty, register it for processing\n"
+    "    // if the tile is not empty, register it for processing\n"
     "    if (current_head != INVALID_INDEX)\n"
     "    {\n"
     "        let pos = atomicAdd(&g_counters.num_tiles, 1u);\n"

@@ -7,7 +7,7 @@ onedraw-webgpu is designed to render everything in a single draw call, maximizin
 
 ## Screenshot
 
-PLACEHOLDER
+![all primitives screenshot](doc/all_primitives.png)
 
 ## Features
 * Single draw call rendering, all primitives are drawn in one draw call.
