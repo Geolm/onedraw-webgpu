@@ -56,17 +56,13 @@ fn op_union(lhs: f32, rhs: f32, aa_width : f32) -> vec2<f32>
     var a = rhs;
     var b = max(lhs, 0.0);
 
-    var h = max( aa_width-abs(a-b), 0.0 ) / aa_width;
-    var m = h*h*h*0.5;
-    var s = m*aa_width*(1.0/3.0); 
-
     if (a<b)
     {
-        return vec2<f32>(a-s, 0.0);
+        return vec2<f32>(a, 0.0);
     }
     else
     {
-        return vec2<f32>(b-s, 1.0 - linearstep(-aa_width, 0.0, b-a));
+        return vec2<f32>(b, 1.0 - linearstep(-aa_width, 0.0, b-a));
     }
 }
 

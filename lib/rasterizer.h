@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 27215;
+static const size_t rasterizer_shader_size = 27098;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -260,17 +260,13 @@ static const char rasterizer_shader[] =
     "    var a = rhs;\n"
     "    var b = max(lhs, 0.0);\n"
     "\n"
-    "    var h = max( aa_width-abs(a-b), 0.0 ) / aa_width;\n"
-    "    var m = h*h*h*0.5;\n"
-    "    var s = m*aa_width*(1.0/3.0); \n"
-    "\n"
     "    if (a<b)\n"
     "    {\n"
-    "        return vec2<f32>(a-s, 0.0);\n"
+    "        return vec2<f32>(a, 0.0);\n"
     "    }\n"
     "    else\n"
     "    {\n"
-    "        return vec2<f32>(b-s, 1.0 - linearstep(-aa_width, 0.0, b-a));\n"
+    "        return vec2<f32>(b, 1.0 - linearstep(-aa_width, 0.0, b-a));\n"
     "    }\n"
     "}\n"
     "\n"
