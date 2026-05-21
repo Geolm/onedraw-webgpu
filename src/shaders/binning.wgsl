@@ -517,6 +517,58 @@ fn intersection_tile_command(tile_aabb: aabb, cmd: draw_command, aabb_margin: f3
     return intersection;
 }
 
+fn clean_list(tile_index: u32)
+{
+    var node_index: u32 = g_tile_heads[tile_index];
+    var previous_index: u32 = INVALID_INDEX;
+    var before_begin: u32 = INVALID_INDEX;
+    var num_primitives: u32 = 0u;
+
+    while (node_index != INVALID_INDEX)
+    {
+        let node = g_tile_nodes[node_index];
+        let cmd_idx = get_command_index(node);
+        let cmd = g_commands[cmd_idx];
+        let command_type = get_type(cmd);
+
+        if (command_type == BEGIN_GROUP)
+        {
+            before_begin = previous_index;
+            previous_index = node_index;
+            num_primitives = 0u;
+        }
+        else if (command_type == END_GROUP)
+        {
+            // no primitive between BEGIN_GROUP / END_GROUP
+            if (num_primitives == 0u)
+            {
+                // remove empty group pair from linked list
+                if (before_begin == INVALID_INDEX)
+                {
+                    g_tile_heads[tile_index] = node.next;
+                }
+                else
+                {
+                    g_tile_nodes[before_begin].next = node.next;
+                }
+
+                previous_index = before_begin;
+            }
+            else
+            {
+                previous_index = node_index;
+            }
+        }
+        else
+        {
+            num_primitives = num_primitives + 1u;
+            previous_index = node_index;
+        }
+
+        node_index = node.next;
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 // Compute Shaders
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -549,7 +601,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
         let cmd = g_commands[cmd_idx];
         let cmd_type = get_type(cmd);
 
-        // 1. Coarse AABB check (Quantized)
+        // coarse AABB check (quantized)
         let q_aabb = g_quantized_aabb[cmd_idx];
         let min_x = (q_aabb >> 0u) & 0xFFu;
         let min_y = (q_aabb >> 8u) & 0xFFu;
@@ -561,7 +613,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
             continue;
         }
 
-        // 2. Clip Rect check
+        // clip Rect check
         let clip_idx = get_clip(cmd);
         let clip = g_clips[clip_idx];
         if (clip_tile(tile_aabb, clip))
@@ -569,7 +621,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
             continue;
         }
 
-        // 3. Fine-grained intersection test
+        // fine-grained intersection test
         let to_be_added = intersection_tile_command(tile_aabb, cmd, g_draw_args.aa_width + aabb_margin);
 
         // we traverse in reverse order, so the end comes first
@@ -597,10 +649,13 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
         }
     }
 
-    // Write final head to global buffer
+    // write final head to global buffer
     g_tile_heads[tile_index] = current_head;
 
-    // If tile is not empty, register it for processing
+    // remove empty groups
+    clean_list(tile_index);
+
+    // if the tile is not empty, register it for processing
     if (current_head != INVALID_INDEX)
     {
         let pos = atomicAdd(&g_counters.num_tiles, 1u);
