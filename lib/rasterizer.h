@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t rasterizer_shader_size = 26970;
+static const size_t rasterizer_shader_size = 27215;
 static const char rasterizer_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -254,13 +254,24 @@ static const char rasterizer_shader[] =
     "// Signed distance functions\n"
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "\n"
-    "fn op_union(lhs: f32, rhs: f32) -> vec2<f32> \n"
+    "fn op_union(lhs: f32, rhs: f32, aa_width : f32) -> vec2<f32> \n"
     "{\n"
     "    // previous color is always overwritten by new one in case of overlap\n"
     "    var a = rhs;\n"
     "    var b = max(lhs, 0.0);\n"
     "\n"
-    "    return vec2<f32>(min(a, b), select(1.0, 0.0, a < b));\n"
+    "    var h = max( aa_width-abs(a-b), 0.0 ) / aa_width;\n"
+    "    var m = h*h*h*0.5;\n"
+    "    var s = m*aa_width*(1.0/3.0); \n"
+    "\n"
+    "    if (a<b)\n"
+    "    {\n"
+    "        return vec2<f32>(a-s, 0.0);\n"
+    "    }\n"
+    "    else\n"
+    "    {\n"
+    "        return vec2<f32>(b-s, 1.0 - linearstep(-aa_width, 0.0, b-a));\n"
+    "    }\n"
     "}\n"
     "\n"
     "fn op_subtraction(lhs: f32, rhs: f32) -> f32\n"
@@ -705,7 +716,7 @@ static const char rasterizer_shader[] =
     "                        {\n"
     "                            case OP_UNION:\n"
     "                            {\n"
-    "                                let res = op_union(previous_distance, distance);\n"
+    "                                let res = op_union(previous_distance, distance, g_draw_args.aa_width);\n"
     "                                previous_distance = res.x;\n"
     "                                previous_color = mix(final_color, previous_color, res.y);\n"
     "                            }\n"

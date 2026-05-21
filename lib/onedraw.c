@@ -1630,7 +1630,14 @@ void od_begin_group(struct onedraw* r, od_operation op, float outline_width)
         return;
     }
 
-    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) op, LAST_CLIP_INDEX, fill_solid, begin_group);
+    gpu_draw_command cmd = gpu_draw_command_make(
+        r->commands.float_data.num_elements, 
+        (uint8_t) op,
+        LAST_CLIP_INDEX,
+        fill_solid,
+        begin_group
+    );
+
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, 0U);
     DB_PUSH(&r->commands.float_data, float, outline_width);
@@ -1648,7 +1655,7 @@ void od_end_group(struct onedraw* r, draw_color outline_color)
 {
     assert_msg(r->commands.group_aabb != NULL, "forgot to call od_begin_group?");
 
-    if (buffers_are_full(r, 0))
+    if (buffers_are_full(r, 1))
     {
         od_log(r, "buffers for primitive are full, expect graphical artefacts");
         return;
@@ -1665,6 +1672,7 @@ void od_end_group(struct onedraw* r, draw_color outline_color)
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, outline_color);
     DB_PUSH(&r->commands.aabb, quantized_aabb, *r->commands.group_aabb);
+    DB_PUSH(&r->commands.float_data, float, r->rasterizer.outline_width);
 
     r->commands.group_aabb = NULL;
     r->rasterizer.outline_width = 0.f;

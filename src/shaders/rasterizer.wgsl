@@ -50,13 +50,24 @@ var<storage, read> g_colors: array<u32>;
 // Signed distance functions
 // ---------------------------------------------------------------------------------------------------------------------------
 
-fn op_union(lhs: f32, rhs: f32) -> vec2<f32> 
+fn op_union(lhs: f32, rhs: f32, aa_width : f32) -> vec2<f32> 
 {
     // previous color is always overwritten by new one in case of overlap
     var a = rhs;
     var b = max(lhs, 0.0);
 
-    return vec2<f32>(min(a, b), select(1.0, 0.0, a < b));
+    var h = max( aa_width-abs(a-b), 0.0 ) / aa_width;
+    var m = h*h*h*0.5;
+    var s = m*aa_width*(1.0/3.0); 
+
+    if (a<b)
+    {
+        return vec2<f32>(a-s, 0.0);
+    }
+    else
+    {
+        return vec2<f32>(b-s, 1.0 - linearstep(-aa_width, 0.0, b-a));
+    }
 }
 
 fn op_subtraction(lhs: f32, rhs: f32) -> f32
@@ -501,7 +512,7 @@ fn tile_fs(in: vs_out) -> @location(0) vec4<f32>
                         {
                             case OP_UNION:
                             {
-                                let res = op_union(previous_distance, distance);
+                                let res = op_union(previous_distance, distance, g_draw_args.aa_width);
                                 previous_distance = res.x;
                                 previous_color = mix(final_color, previous_color, res.y);
                             }
