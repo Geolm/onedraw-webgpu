@@ -3,7 +3,7 @@ webGPU GPU driven 2d sdf renderer drop-in library
 
 ## GPU-driven sdf 2D renderer drop-in library
 
-onedraw-webgpu is designed to render everything in a single draw call, maximizing GPU efficiency for 2D graphics. This is a port of the Metal version, it currently uses wgpu as webgpu layer but should work with Dawn. 
+onedraw-webgpu is designed to render everything in a single draw call, maximizing GPU efficiency for 2D graphics. It uses webGPU natively and has only one .c file to make it easy to integrate.
 
 ## Screenshot
 
@@ -24,7 +24,6 @@ onedraw-webgpu is designed to render everything in a single draw call, maximizin
 * Hierarchical tile binning : copmpute shaders to pre-filter tile commands lists at a high level (4x4 regions for the whole screen)
 * Timing : get gpu time from webgpu
 * emscripten example
-
 
 ## Integration
 
