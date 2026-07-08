@@ -6,6 +6,9 @@
 //-------------------------------------------------------------------------------------------------
 bool bin2h(const char* filename, const char* variable, const void* buffer, size_t length)
 {
+    if (length == 0)
+        return false;
+
     FILE *f = fopen(filename, "wt");
     if (f == NULL)
         return false;
@@ -35,6 +38,9 @@ bool bin2h(const char* filename, const char* variable, const void* buffer, size_
 //-------------------------------------------------------------------------------------------------
 bool string2h(const char* filename, const char* variable, const char* string, size_t length)
 {
+    if (length == 0)
+        return false;
+
     FILE* f = fopen(filename, "wt");
     if (!f)
         return false;
