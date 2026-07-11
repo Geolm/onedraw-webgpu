@@ -43,5 +43,5 @@ Follow the step to build and run the test program:
 * mkdir build
 * cd build
 * cmake ..
-* make
+* cmake --build .
 * ./test
