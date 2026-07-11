@@ -200,12 +200,19 @@ int main(int argc, char* argv[])
     (void)(argv);
 
     glfwInit();
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+
+    float xscale, yscale;
+    glfwGetMonitorContentScale(monitor, &xscale, &yscale);
+
+    uint32_t window_width = (uint32_t)(2560.0f / xscale);
+    uint32_t window_height = (uint32_t)(1440.0f / yscale);
+
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
     glfwWindowHint(GLFW_SAMPLES, 0);
 
-    g_window = glfwCreateWindow(1280, 720, "onedraw-webgpu", NULL, NULL);
+    g_window = glfwCreateWindow(window_width, window_height, "onedraw-webgpu", NULL, NULL);
     assert(g_window != NULL);
 
     glfwSetKeyCallback(g_window, key_cb);
