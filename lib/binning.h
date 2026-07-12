@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-static const size_t binning_shader_size = 27847;
+static const size_t binning_shader_size = 27856;
 static const char binning_shader[] =
     "// ---------------------------------------------------------------------------------------------------------------------------\n"
     "// Structures\n"
@@ -841,13 +841,10 @@ static const char binning_shader[] =
     "        if (to_be_added)\n"
     "        {\n"
     "            let node_idx = atomicAdd(&g_counters.num_nodes, 1u);\n"
-    "\n"
     "            if (node_idx < g_draw_args.max_nodes)\n"
     "            {\n"
     "                let packed_info = (cmd_type << 16u) | (cmd_idx & 0xFFFFu);\n"
-    "\n"
     "                g_tile_nodes[node_idx] = tile_node(current_head, packed_info);\n"
-    "\n"
     "                current_head = node_idx;\n"
     "            }\n"
     "        }\n"
@@ -860,7 +857,7 @@ static const char binning_shader[] =
     "    clean_list(tile_index);\n"
     "\n"
     "    // if the tile is not empty, register it for processing\n"
-    "    if (current_head != INVALID_INDEX)\n"
+    "    if (g_tile_heads[tile_index] != INVALID_INDEX)\n"
     "    {\n"
     "        let pos = atomicAdd(&g_counters.num_tiles, 1u);\n"
     "        g_tile_indices[pos] = tile_index;\n"

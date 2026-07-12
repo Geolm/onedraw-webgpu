@@ -637,13 +637,10 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
         if (to_be_added)
         {
             let node_idx = atomicAdd(&g_counters.num_nodes, 1u);
-
             if (node_idx < g_draw_args.max_nodes)
             {
                 let packed_info = (cmd_type << 16u) | (cmd_idx & 0xFFFFu);
-
                 g_tile_nodes[node_idx] = tile_node(current_head, packed_info);
-
                 current_head = node_idx;
             }
         }
@@ -656,7 +653,7 @@ fn tile_bin(@builtin(global_invocation_id) global_id: vec3<u32>)
     clean_list(tile_index);
 
     // if the tile is not empty, register it for processing
-    if (current_head != INVALID_INDEX)
+    if (g_tile_heads[tile_index] != INVALID_INDEX)
     {
         let pos = atomicAdd(&g_counters.num_tiles, 1u);
         g_tile_indices[pos] = tile_index;
