@@ -105,16 +105,16 @@ if(TARGET build_lib)
 endif()
 
 # --- Test app ---
-add_executable(test
+add_executable(unit_tests
     ./lib/onedraw.c
     ./tests/test.c
     ./tests/native_webgpu.c
 )
 
-target_link_libraries(test glfw)
+target_link_libraries(unit_tests glfw)
 
 if(TARGET build_lib)
-    add_dependencies(test run_builder)
+    add_dependencies(unit_tests run_builder)
 endif()
 
-setup_app(test)
+setup_app(unit_tests)

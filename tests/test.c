@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
+#include <string.h>
 
 #include <GLFW/glfw3.h>
 
@@ -324,6 +325,150 @@ static void capture_screenshot(WGPUDevice device, WGPUTexture texture, uint32_t 
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
+struct bmp_header
+{
+    uint32_t width;
+    uint32_t height;
+};
+
+// Parses a 32-bit uncompressed BMP header and positions the stream on the pixel data.
+static bool read_bmp_header(FILE* file, struct bmp_header* header)
+{
+    uint8_t raw[54];
+    if (fread(raw, 1, sizeof(raw), file) != sizeof(raw) || raw[0] != 'B' || raw[1] != 'M')
+        return false;
+
+    uint32_t data_offset;
+    uint32_t header_size;
+    int32_t width;
+    int32_t height;
+    uint16_t planes;
+    uint16_t bits_per_pixel;
+    uint32_t compression;
+
+    memcpy(&data_offset, raw + 10, sizeof(data_offset));
+    memcpy(&header_size, raw + 14, sizeof(header_size));
+    memcpy(&width, raw + 18, sizeof(width));
+    memcpy(&height, raw + 22, sizeof(height));
+    memcpy(&planes, raw + 26, sizeof(planes));
+    memcpy(&bits_per_pixel, raw + 28, sizeof(bits_per_pixel));
+    memcpy(&compression, raw + 30, sizeof(compression));
+
+    bool valid = header_size >= 40 &&
+        planes == 1 &&
+        bits_per_pixel == 32 &&
+        compression == 0 &&
+        width > 0 &&
+        height != 0 &&
+        data_offset >= 54;
+
+    if (!valid)
+        return false;
+
+    header->width = (uint32_t)width;
+    header->height = height < 0 ? (uint32_t)(-height) : (uint32_t)height;   // top-down rows are stored with a negative height
+    fseek(file, (long)data_offset, SEEK_SET);
+
+    return true;
+}
+
+// Unit test : compares the captured screenshot against the reference image. Pass if pixel-identical or PSNR > 45 dB.
+static int compare_screenshots(const char* captured_path, const char* reference_path)
+{
+    FILE* captured = fopen(captured_path, "rb");
+    if (captured == NULL)
+    {
+        fprintf(stderr, "screenshot: FAIL: cannot open '%s' (capture did not run or failed)\n", captured_path);
+        return 1;
+    }
+
+    FILE* reference = fopen(reference_path, "rb");
+    if (reference == NULL)
+    {
+        fprintf(stderr, "screenshot: FAIL: cannot open reference '%s'\n", reference_path);
+        fclose(captured);
+        return 1;
+    }
+
+    struct bmp_header captured_header;
+    struct bmp_header reference_header;
+    if (!read_bmp_header(captured, &captured_header) || !read_bmp_header(reference, &reference_header))
+    {
+        fprintf(stderr, "screenshot: FAIL: malformed or unsupported BMP header\n");
+        fclose(captured);
+        fclose(reference);
+        return 1;
+    }
+
+    if (captured_header.width != reference_header.width || captured_header.height != reference_header.height)
+    {
+        fprintf(stderr, "screenshot: FAIL: size mismatch (%ux%u captured, %ux%u reference)\n", captured_header.width, captured_header.height,
+                reference_header.width, reference_header.height);
+        fprintf(stderr, "  (framebuffer size follows the display scale; the reference was captured on a different display or scale)\n");
+        fclose(captured);
+        fclose(reference);
+        return 1;
+    }
+
+    size_t row_size = (size_t)captured_header.width * 4;
+    uint8_t* captured_row = malloc(row_size);
+    uint8_t* reference_row = malloc(row_size);
+    if (captured_row == NULL || reference_row == NULL)
+    {
+        fprintf(stderr, "screenshot: FAIL: out of memory\n");
+        free(captured_row);
+        free(reference_row);
+        fclose(captured);
+        fclose(reference);
+        return 1;
+    }
+
+    // Rows are streamed one at a time: the sum of squared errors is order-independent, so no full-frame buffer is needed.
+    double sse = 0.0;
+    for (uint32_t y = 0; y < captured_header.height; y++)
+    {
+        if (fread(captured_row, row_size, 1, captured) != 1 || fread(reference_row, row_size, 1, reference) != 1)
+        {
+            fprintf(stderr, "screenshot: FAIL: truncated pixel data in '%s' or '%s'\n", captured_path, reference_path);
+            free(captured_row);
+            free(reference_row);
+            fclose(captured);
+            fclose(reference);
+            return 1;
+        }
+
+        for (size_t x = 0; x < row_size; x++)
+        {
+            int d = (int)captured_row[x] - (int)reference_row[x];
+            sse += (double)(d * d);
+        }
+    }
+
+    free(captured_row);
+    free(reference_row);
+    fclose(captured);
+    fclose(reference);
+
+    if (sse == 0.0)
+    {
+        printf("screenshot: PASS: images are identical\n");
+        return 0;
+    }
+
+    double mse = sse / ((double)captured_header.width * (double)captured_header.height * 4.0);
+    double psnr = 10.0 * log10(255.0 * 255.0 / mse);
+
+    if (psnr > 45.0)
+    {
+        printf("screenshot: PASS: PSNR = %.2f dB (> 45.00 dB)\n", psnr);
+        return 0;
+    }
+
+    printf("screenshot: FAIL: PSNR = %.2f dB (<= 45.00 dB)\n", psnr);
+    return 1;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 void frame(void)
 {
     WGPUSurfaceTexture surfaceTexture;
@@ -389,8 +534,10 @@ int main(int argc, char* argv[])
     float xscale, yscale;
     glfwGetMonitorContentScale(monitor, &xscale, &yscale);
 
-    uint32_t window_width = (uint32_t)(2560.0f / xscale);
-    uint32_t window_height = (uint32_t)(1440.0f / yscale);
+    // Fixed 1280x720 framebuffer regardless of display scale: request reference pixels / current content scale as logical points.
+    // On 1x displays that is 1280x720 points; on 2x displays 640x360 points, both yielding the same 1280x720 framebuffer.
+    uint32_t window_width = (uint32_t)(1280.0f / xscale);
+    uint32_t window_height = (uint32_t)(720.0f / yscale);
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
@@ -403,11 +550,14 @@ int main(int argc, char* argv[])
 
     init();
 
-    int frame_count = 0;
+    uint32_t frame_count = 0;
     while (!glfwWindowShouldClose(g_window))
     {
         if (frame_count == 30)
+        {
+            remove("screenshot.bmp");   // a stale artifact from a previous run must not mask a failed capture
             g_screenshot = true;
+        }
 
         frame();
         glfwPollEvents();
@@ -421,7 +571,8 @@ int main(int argc, char* argv[])
 
     cleanup();
 
-    return 0;
+    // The unit test : the frame 30 screenshot must match tests/reference.bmp (pixel-identical or PSNR > 45 dB).
+    return compare_screenshots("screenshot.bmp", "tests/reference.bmp");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------

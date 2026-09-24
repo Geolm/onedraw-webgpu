@@ -40,8 +40,6 @@ PLACEHOLDER
 
 Follow the step to build and run the test program:
 
-* mkdir build
-* cd build
-* cmake ..
-* cmake --build .
-* ./test
+* cmake -B build -S .
+* cmake --build build
+* ./build/unit_tests
