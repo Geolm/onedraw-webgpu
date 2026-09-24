@@ -160,7 +160,7 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
     wgpu->surface_cfg = (WGPUSurfaceConfiguration)
     {
         .device = wgpu->device,
-        .usage = WGPUTextureUsage_RenderAttachment,
+        .usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc,
         .format = surface_caps.formats[0],
         .viewFormatCount = 1,
         .presentMode = WGPUPresentMode_Fifo,

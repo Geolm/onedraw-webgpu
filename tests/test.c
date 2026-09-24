@@ -33,6 +33,8 @@ struct onedraw* g_renderer;
 struct webgpu_platform g_wgpu;
 struct GLFWwindow* g_window;
 
+bool g_screenshot = false;
+
 void all_primitives(float width, float height);
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -149,6 +151,179 @@ void init(void)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+struct screenshot_ctx
+{
+    WGPUBuffer buffer;
+    uint64_t size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t pitch;
+    WGPUTextureFormat format;
+};
+
+// ---------------------------------------------------------------------------------------------------------------------------
+static void save_bmp(const char* path, uint32_t width, uint32_t height, uint32_t pitch, const uint8_t* data, WGPUTextureFormat format)
+{
+    bool bgra = (format == WGPUTextureFormat_BGRA8Unorm || format == WGPUTextureFormat_BGRA8UnormSrgb);
+    bool rgba = (format == WGPUTextureFormat_RGBA8Unorm || format == WGPUTextureFormat_RGBA8UnormSrgb);
+    if (!bgra && !rgba)
+    {
+        fprintf(stderr, "screenshot: unsupported format %d\n", (int)format);
+        return;
+    }
+
+    FILE* file = fopen(path, "wb");
+    if (file == NULL)
+    {
+        fprintf(stderr, "screenshot: could not open '%s' for writing\n", path);
+        return;
+    }
+
+    uint32_t row_size = width * 4;
+
+    uint16_t type = 0x4D42;                       // 'BM' little-endian
+    uint32_t file_size = 54 + row_size * height;
+    uint16_t reserved = 0;
+    uint32_t pixel_offset = 54;
+
+    fwrite(&type, 2, 1, file);
+    fwrite(&file_size, 4, 1, file);
+    fwrite(&reserved, 2, 1, file);
+    fwrite(&reserved, 2, 1, file);
+    fwrite(&pixel_offset, 4, 1, file);
+
+    struct bitmap_info_header
+    {
+        uint32_t header_size;
+        int32_t width;
+        int32_t height;
+        uint16_t planes;
+        uint16_t bits_per_pixel;
+        uint32_t compression;
+        uint32_t image_size;
+        uint32_t pixels_per_meter_x;
+        uint32_t pixels_per_meter_y;
+        uint32_t palette_used;
+        uint32_t palette_important;
+    } info_header =
+    {
+        .header_size = 40,
+        .width = (int32_t)width,
+        .height = -(int32_t)height,               // negative height = top-down rows
+        .planes = 1,
+        .bits_per_pixel = 32
+    };
+
+    fwrite(&info_header, sizeof(info_header), 1, file);
+
+    for (uint32_t y = 0; y < height; y++)
+    {
+        const uint8_t* row = data + y * pitch;
+        if (bgra)
+            fwrite(row, row_size, 1, file);
+        else
+            for (uint32_t x = 0; x < row_size; x += 4)
+            {
+                uint8_t pixel[4] = { row[x + 2], row[x + 1], row[x], row[x + 3] };   // RGBA -> BGRA
+                fwrite(pixel, 4, 1, file);
+            }
+    }
+
+    fclose(file);
+
+    printf("screenshot: saved %s (%ux%u)\n", path, width, height);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+static void screenshot_map_cb(WGPUMapAsyncStatus status, WGPUStringView message, void* userdata1, void* userdata2)
+{
+    struct screenshot_ctx* ctx = userdata1;
+    (void)userdata2;
+
+    if (status == WGPUMapAsyncStatus_Success)
+    {
+        const uint8_t* data = wgpuBufferGetConstMappedRange(ctx->buffer, 0, ctx->size);
+        save_bmp("screenshot.bmp", ctx->width, ctx->height, ctx->pitch, data, ctx->format);
+
+        wgpuBufferUnmap(ctx->buffer);
+    }
+    else
+    {
+        if (message.data != NULL)
+            fprintf(stderr, "screenshot: map failed (%d) %.*s\n", (int)status, (int)message.length, message.data);
+        else
+            fprintf(stderr, "screenshot: map failed (%d)\n", (int)status);
+    }
+
+    wgpuBufferRelease(ctx->buffer);
+    free(ctx);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+static void capture_screenshot(WGPUDevice device, WGPUTexture texture, uint32_t width, uint32_t height, WGPUTextureFormat format)
+{
+    uint32_t pitch = ((width * 4) + 255) / 256 * 256;   // bytesPerRow must be a multiple of 256
+    uint64_t size = (uint64_t)pitch * height;
+
+    WGPUBufferDescriptor buffer_desc =
+    {
+        .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead,
+        .size = size
+    };
+    WGPUBuffer buffer = wgpuDeviceCreateBuffer(device, &buffer_desc);
+
+    WGPUCommandEncoderDescriptor encoder_desc = {0};
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encoder_desc);
+
+    WGPUTexelCopyTextureInfo src =
+    {
+        .texture = texture,
+        .origin = {0, 0, 0},
+        .aspect = WGPUTextureAspect_All
+    };
+
+    WGPUTexelCopyBufferInfo dst =
+    {
+        .layout = {0, pitch, height},
+        .buffer = buffer
+    };
+
+    WGPUExtent3D extent = {width, height, 1};
+    wgpuCommandEncoderCopyTextureToBuffer(encoder, &src, &dst, &extent);
+
+    WGPUCommandBufferDescriptor cmd_desc = {0};
+    WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_desc);
+    wgpuCommandEncoderRelease(encoder);
+
+    WGPUQueue queue = wgpuDeviceGetQueue(device);
+    wgpuQueueSubmit(queue, 1, &cmd);
+    wgpuCommandBufferRelease(cmd);
+
+    struct screenshot_ctx* ctx = malloc(sizeof(*ctx));
+    if (ctx == NULL)
+    {
+        wgpuBufferRelease(buffer);
+        return;
+    }
+
+    ctx->buffer = buffer;
+    ctx->size = size;
+    ctx->width = width;
+    ctx->height = height;
+    ctx->pitch = pitch;
+    ctx->format = format;
+
+    WGPUBufferMapCallbackInfo cb_info =
+    {
+        .mode = WGPUCallbackMode_AllowProcessEvents,
+        .callback = screenshot_map_cb,
+        .userdata1 = ctx
+    };
+    // The map callback owns the buffer reference: it must stay alive until the callback runs.
+    (void)wgpuBufferMapAsync(buffer, WGPUMapMode_Read, 0, size, cb_info);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 void frame(void)
 {
     WGPUSurfaceTexture surfaceTexture;
@@ -166,6 +341,12 @@ void frame(void)
     od_begin_frame(g_renderer);
     all_primitives((float)width, (float)height);
     od_end_frame(g_renderer, frame);
+
+    if (g_screenshot)
+    {
+        g_screenshot = false;
+        capture_screenshot(g_wgpu.device, surfaceTexture.texture, (uint32_t)width, (uint32_t)height, g_wgpu.surface_cfg.format);
+    }
 
     wgpuSurfacePresent(g_wgpu.surface);
     wgpuTextureViewRelease(frame);
@@ -191,6 +372,9 @@ void key_cb(struct GLFWwindow* window, int key, int scancode, int action, int mo
         culling_debug = !culling_debug;
         od_set_culling_debug(g_renderer, culling_debug);
     }
+
+    if (key == GLFW_KEY_S && action == GLFW_PRESS && mods&GLFW_MOD_SUPER)
+        g_screenshot = true;
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -219,10 +403,20 @@ int main(int argc, char* argv[])
 
     init();
 
+    int frame_count = 0;
     while (!glfwWindowShouldClose(g_window))
     {
+        if (frame_count == 30)
+            g_screenshot = true;
+
         frame();
         glfwPollEvents();
+
+        // wgpu-native is single-threaded: async map callbacks only fire while events are pumped
+        wgpuInstanceProcessEvents(g_wgpu.instance);
+
+        if (++frame_count >= 60)
+            break;
     }
 
     cleanup();
