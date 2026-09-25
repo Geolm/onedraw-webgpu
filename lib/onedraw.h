@@ -153,6 +153,8 @@ void od_upload_slice(struct onedraw* r, const void* pixel_data, uint32_t slice_i
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Resizes the renderer output dimensions (call this when the window size changes)
+//      [width]               framebuffer width in pixels, must be > 16
+//      [height]              framebuffer height in pixels, must be > 16
 void od_resize(struct onedraw* r, uint32_t width, uint32_t height);
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -173,7 +175,7 @@ float od_get_gputime(struct onedraw* r);
 void od_terminate(struct onedraw* r);
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// Fill the od_stats structure with latest data
+// Fill the od_stats structure with latest data, must be called after od_end_frame()
 //      [stats]     non-NULL pointer to the structure
 void od_get_stats(const struct onedraw* r, od_stats* stats);
 

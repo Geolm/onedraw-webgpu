@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
 void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window);
+void resize_webgpu(webgpu_platform* wgpu, uint32_t width, uint32_t height);
 void terminate_webgpu(webgpu_platform* wgpu);
 
 #ifdef __cplusplus

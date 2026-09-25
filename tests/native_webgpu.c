@@ -191,6 +191,15 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
+void resize_webgpu(webgpu_platform* wgpu, uint32_t width, uint32_t height)
+{
+    wgpu->surface_cfg.width = width;
+    wgpu->surface_cfg.height = height;
+
+    wgpuSurfaceConfigure(wgpu->surface, &wgpu->surface_cfg);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
 void terminate_webgpu(webgpu_platform* wgpu)
 {
     wgpuDeviceRelease(wgpu->device);

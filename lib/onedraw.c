@@ -764,7 +764,7 @@ void build_layout(struct onedraw* r)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
-void build_bind_groups(struct onedraw* r)
+void create_state_bind_groups(struct onedraw* r)
 {
     WGPUBindGroupEntry rasterizer_entries[] = 
     {
@@ -787,6 +787,7 @@ void build_bind_groups(struct onedraw* r)
     assert(r->font.view != NULL);
     assert(r->font.sampler != NULL);
 
+    SAFE_RELEASE(r->binding.rasterizer_bindgroup, wgpuBindGroupRelease);
     r->binding.rasterizer_bindgroup =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
         .label = WGPU_STRING_VIEW("rasterizer bindgroup"),
@@ -809,6 +810,7 @@ void build_bind_groups(struct onedraw* r)
     assert(r->tiles.heads != NULL);
     assert(r->tiles.indirect_draw_params != NULL);
 
+    SAFE_RELEASE(r->binding.binning_bindgroup, wgpuBindGroupRelease);
     r->binding.binning_bindgroup =  wgpuDeviceCreateBindGroup(r->device, &(WGPUBindGroupDescriptor)
     {
         .label = WGPU_STRING_VIEW("binning bindgroup"),
@@ -816,7 +818,13 @@ void build_bind_groups(struct onedraw* r)
         .entryCount = ARRAY_SIZE(binning_entries),
         .entries = binning_entries
     });
-    assert_msg(r->binding.binning_bindgroup != NULL, "cannot create rasterizer binding group");
+    assert_msg(r->binding.binning_bindgroup != NULL, "cannot create binning binding group");
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void build_bind_groups(struct onedraw* r)
+{
+    create_state_bind_groups(r);
 
     for(uint32_t i=0; i<BUFFER_FRAME_COUNT; ++i)
     {
@@ -1387,6 +1395,12 @@ void od_resize(struct onedraw* r, uint32_t width, uint32_t height)
             .usage = WGPUBufferUsage_Storage
         });
 
+        // The layouts, PSOs and samplers are size-independent, but the bind groups captured the old
+        // heads/indices buffers, so they must be rebuilt to reference the new ones. Only rebuild if
+        // they already exist: during od_init(), od_resize() runs before build_bind_groups().
+        if (r->binding.rasterizer_bindgroup != NULL)
+            create_state_bind_groups(r);
+
         od_log(r, "%ux%u tiles", r->tiles.num_width, r->tiles.num_height);
     }
     
@@ -1413,8 +1427,10 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 {
     assert_msg(r->commands.group_aabb == NULL, "begin/end group pair mismatch");
 
-    r->stats.peak_num_draw_cmd = OD_MAX(r->stats.peak_num_draw_cmd, (uint32_t)r->commands.list.num_elements);
     r->stats.num_draw_data = (uint32_t)r->commands.float_data.num_elements;
+    r->stats.peak_num_draw_cmd = OD_MAX(r->stats.peak_num_draw_cmd, r->stats.num_draw_data);
+    
+    assert(r->stats.peak_num_draw_cmd >= r->stats.num_draw_data);
 
     uint32_t options = 0;
     options |= r->tiles.culling_debug ? OPTION_DEBUG_BINNING : 0U;
@@ -1555,6 +1571,7 @@ void od_terminate(struct onedraw* r)
 //----------------------------------------------------------------------------------------------------------------------------
 void od_get_stats(const struct onedraw* r, od_stats* stats)
 {
+    stats->num_draw_cmd = r->stats.num_draw_data;
     stats->peak_num_draw_cmd = r->stats.peak_num_draw_cmd;
     stats->frame_index = r->stats.frame_index;
     stats->gpu_memory_usage = dynamic_buffer_get_gpu_mem(&r->commands.aabb);

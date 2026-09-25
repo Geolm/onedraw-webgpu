@@ -76,5 +76,5 @@ _deps
 /build
 
 # project specific
-screenshot.bmp
+test*.bmp
 AGENTS.md

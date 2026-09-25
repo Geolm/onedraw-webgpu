@@ -35,6 +35,15 @@ struct webgpu_platform g_wgpu;
 struct GLFWwindow* g_window;
 
 bool g_screenshot = false;
+const char* g_screenshot_path = "screenshot.bmp";
+
+// Last framebuffer size applied to the surface and renderer, used to dedupe the GLFW size callback.
+uint32_t g_resize_width = 0;
+uint32_t g_resize_height = 0;
+od_stats g_stats;
+
+// Last status returned by wgpuSurfaceGetCurrentTexture, checked in main() after the resize round-trip.
+WGPUSurfaceGetCurrentTextureStatus g_last_surface_status = WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal;
 
 void all_primitives(float width, float height);
 
@@ -128,6 +137,10 @@ void init(void)
     int width, height;
     glfwGetFramebufferSize(g_window, &width, &height);
 
+    // The size callback dedupes against the last applied size, start from the initial framebuffer size.
+    g_resize_width = (uint32_t)width;
+    g_resize_height = (uint32_t)height;
+
     init_webgpu(&g_wgpu, g_window);
 
     g_renderer = od_init( &(onedraw_def)
@@ -160,6 +173,7 @@ struct screenshot_ctx
     uint32_t height;
     uint32_t pitch;
     WGPUTextureFormat format;
+    const char* path;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -244,7 +258,7 @@ static void screenshot_map_cb(WGPUMapAsyncStatus status, WGPUStringView message,
     if (status == WGPUMapAsyncStatus_Success)
     {
         const uint8_t* data = wgpuBufferGetConstMappedRange(ctx->buffer, 0, ctx->size);
-        save_bmp("screenshot.bmp", ctx->width, ctx->height, ctx->pitch, data, ctx->format);
+        save_bmp(ctx->path, ctx->width, ctx->height, ctx->pitch, data, ctx->format);
 
         wgpuBufferUnmap(ctx->buffer);
     }
@@ -261,7 +275,7 @@ static void screenshot_map_cb(WGPUMapAsyncStatus status, WGPUStringView message,
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-static void capture_screenshot(WGPUDevice device, WGPUTexture texture, uint32_t width, uint32_t height, WGPUTextureFormat format)
+static void capture_screenshot(WGPUDevice device, WGPUTexture texture, uint32_t width, uint32_t height, WGPUTextureFormat format, const char* path)
 {
     uint32_t pitch = ((width * 4) + 255) / 256 * 256;   // bytesPerRow must be a multiple of 256
     uint64_t size = (uint64_t)pitch * height;
@@ -313,6 +327,7 @@ static void capture_screenshot(WGPUDevice device, WGPUTexture texture, uint32_t 
     ctx->height = height;
     ctx->pitch = pitch;
     ctx->format = format;
+    ctx->path = path;
 
     WGPUBufferMapCallbackInfo cb_info =
     {
@@ -474,6 +489,8 @@ void frame(void)
     WGPUSurfaceTexture surfaceTexture;
     wgpuSurfaceGetCurrentTexture(g_wgpu.surface, &surfaceTexture);
 
+    g_last_surface_status = surfaceTexture.status;
+
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
         surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
         return;
@@ -483,14 +500,26 @@ void frame(void)
     int width, height;
     glfwGetFramebufferSize(g_window, &width, &height);
 
+    // After a surface reconfigure, queued textures come back at the old size (suboptimal), and the framebuffer
+    // can be 0x0 during window transitions (od_resize asserts > 16). Present without drawing to drain them,
+    // then resume normal rendering.
+    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal || width == 0 || height == 0)
+    {
+        wgpuSurfacePresent(g_wgpu.surface);
+        wgpuTextureViewRelease(frame);
+        wgpuTextureRelease(surfaceTexture.texture);
+        return;
+    }
+
     od_begin_frame(g_renderer);
     all_primitives((float)width, (float)height);
     od_end_frame(g_renderer, frame);
+    od_get_stats(g_renderer, &g_stats);
 
     if (g_screenshot)
     {
         g_screenshot = false;
-        capture_screenshot(g_wgpu.device, surfaceTexture.texture, (uint32_t)width, (uint32_t)height, g_wgpu.surface_cfg.format);
+        capture_screenshot(g_wgpu.device, surfaceTexture.texture, (uint32_t)width, (uint32_t)height, g_wgpu.surface_cfg.format, g_screenshot_path);
     }
 
     wgpuSurfacePresent(g_wgpu.surface);
@@ -519,14 +548,43 @@ void key_cb(struct GLFWwindow* window, int key, int scancode, int action, int mo
     }
 
     if (key == GLFW_KEY_S && action == GLFW_PRESS && mods&GLFW_MOD_SUPER)
+    {
+        g_screenshot_path = "screenshot.bmp";
         g_screenshot = true;
+    }
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+void size_cb(struct GLFWwindow* window, int width, int height)
+{
+    (void)(width);
+    (void)(height);
+
+    int framebuffer_width, framebuffer_height;
+    glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
+
+    // The callback arguments are in logical points (content-scale dependent), the app keys off framebuffer pixels.
+    // Skip zero-sized frames (window transitions) and sizes that are already applied : GLFW can deliver several
+    // callbacks per drag, and od_resize() must not run on a 0x0 framebuffer.
+    if (framebuffer_width <= 0 || framebuffer_height <= 0)
+        return;
+
+    if ((uint32_t)framebuffer_width == g_resize_width && (uint32_t)framebuffer_height == g_resize_height)
+        return;
+
+    g_resize_width = (uint32_t)framebuffer_width;
+    g_resize_height = (uint32_t)framebuffer_height;
+
+    resize_webgpu(&g_wgpu, g_resize_width, g_resize_height);
+    od_resize(g_renderer, g_resize_width, g_resize_height);
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
-    (void)(argc);
-    (void)(argv);
+    bool automatic_exit = true;
+    if (argc > 1 && strcmp(argv[1], "-noexit") == 0)
+        automatic_exit = false;
 
     glfwInit();
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
@@ -547,15 +605,42 @@ int main(int argc, char* argv[])
     assert(g_window != NULL);
 
     glfwSetKeyCallback(g_window, key_cb);
+    glfwSetWindowSizeCallback(g_window, size_cb);
 
     init();
+
+    // Original sizes, used to restore the window and to check the state after the round-trip.
+    int fb_width, fb_height;
+    glfwGetFramebufferSize(g_window, &fb_width, &fb_height);
+    uint32_t original_framebuffer_width = (uint32_t)fb_width;
+    uint32_t original_framebuffer_height = (uint32_t)fb_height;
+
+    bool resized = false;
+    bool restored = false;
 
     uint32_t frame_count = 0;
     while (!glfwWindowShouldClose(g_window))
     {
         if (frame_count == 30)
         {
-            remove("screenshot.bmp");   // a stale artifact from a previous run must not mask a failed capture
+            g_screenshot_path = "test0.bmp";
+            g_screenshot = true;
+        }
+        else if (frame_count == 35 && !resized)
+        {
+            // Half the logical size : the size callback reconfigures the surface and grows the renderer.
+            glfwSetWindowSize(g_window, (int)window_width/2, (int)window_height/2);
+            resized = true;
+        }
+        else if (frame_count == 65 && resized && !restored)
+        {
+            // Restore the original size : the renderer shrinks again, exercising both directions of the resize.
+            glfwSetWindowSize(g_window, (int)window_width, (int)window_height);
+            restored = true;
+        }
+        else if (frame_count == 95 && restored)
+        {
+            g_screenshot_path = "test1.bmp";
             g_screenshot = true;
         }
 
@@ -565,14 +650,36 @@ int main(int argc, char* argv[])
         // wgpu-native is single-threaded: async map callbacks only fire while events are pumped
         wgpuInstanceProcessEvents(g_wgpu.instance);
 
-        if (++frame_count >= 60)
+        if (++frame_count >= 130 && automatic_exit)
             break;
     }
 
+    // The scripted round-trip must have completed, and the window must be back at the original framebuffer
+    // size with the surface drained back to optimal.
+    if (!resized || !restored)
+    {
+        fprintf(stderr, "resize: FAIL: scripted round-trip did not complete\n");
+        return 1;
+    }
+
+    glfwGetFramebufferSize(g_window, &fb_width, &fb_height);
+    if ((uint32_t)fb_width != original_framebuffer_width || (uint32_t)fb_height != original_framebuffer_height ||
+        g_last_surface_status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+    {
+        fprintf(stderr, "resize: FAIL: after round-trip framebuffer is %dx%d (expected %ux%u), surface status %d\n",
+                fb_width, fb_height, original_framebuffer_width, original_framebuffer_height, (int)g_last_surface_status);
+        return 1;
+    }
+
+    printf("resize: PASS: round-trip restored %ux%u framebuffer, surface optimal\n", original_framebuffer_width, original_framebuffer_height);
+
     cleanup();
 
-    // The unit test : the frame 30 screenshot must match tests/reference.bmp (pixel-identical or PSNR > 45 dB).
-    return compare_screenshots("screenshot.bmp", "tests/reference.bmp");
+    // The unit test : both screenshots must match tests/reference.bmp (pixel-identical or PSNR > 45 dB).
+    // The demo is deterministic (fixed seed, layout proportional to the framebuffer), so the restored size
+    // reproduces the original image : this asserts the full resize round-trip, including the rebuilt bind groups.
+    return compare_screenshots("test0.bmp", "tests/reference.bmp") ||
+           compare_screenshots("test1.bmp", "tests/reference.bmp");
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -742,12 +849,10 @@ void all_primitives(float width, float height)
                              radius * 0.1f, miya_pale_blue, miya_red);
     od_draw_text(g_renderer, cx-radius, cy-radius*1.25f, "capsule_gradient", miya_brown);
 
-    od_stats stats;
-    od_get_stats(g_renderer, &stats);
-    snprintf(string, 256, "GPU Memory usage : %zu kb", stats.gpu_memory_usage>>10);
+    snprintf(string, 256, "GPU Memory usage : %zu kb", g_stats.gpu_memory_usage>>10);
     od_draw_text(g_renderer, 0, height - od_get_text_height(g_renderer) * 2.f, string, miya_blue);
 
-    snprintf(string, 256, "num commands : %u", stats.peak_num_draw_cmd);
+    snprintf(string, 256, "num commands : %u", g_stats.num_draw_cmd);
     od_draw_text(g_renderer, (width - od_get_text_width(g_renderer, string)),
                             height - od_get_text_height(g_renderer) * 2.f, string, miya_blue);
 }
