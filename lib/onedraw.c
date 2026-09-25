@@ -1647,13 +1647,7 @@ void od_begin_group(struct onedraw* r, od_operation op, float outline_width)
         return;
     }
 
-    gpu_draw_command cmd = gpu_draw_command_make(
-        r->commands.float_data.num_elements, 
-        (uint8_t) op,
-        LAST_CLIP_INDEX,
-        fill_solid,
-        begin_group
-    );
+    gpu_draw_command cmd = gpu_draw_command_make(r->commands.float_data.num_elements, (uint8_t) op, LAST_CLIP_INDEX, fill_solid, begin_group);
 
     DB_PUSH(&r->commands.list, gpu_draw_command, cmd);
     DB_PUSH(&r->commands.colors, draw_color, 0U);

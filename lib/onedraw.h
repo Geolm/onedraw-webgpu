@@ -334,6 +334,7 @@ void od_draw_char(struct onedraw* r, float x, float y, char c, draw_color srgb_c
 // Draws a zero-terminated string, carriage return (\n) are taken in account
 //      [x, y]                  top-left coordinates of the string
 //      [text]                  string to be rendered
+//      [srgb_color]            color that will multiply by the texture's fragment
 void od_draw_text(struct onedraw* r, float x, float y, const char* text, draw_color srgb_color);
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -362,6 +363,8 @@ uint32_t od_draw_quadratic_bezier(struct onedraw* r, const float* control_points
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Draws a cubic bezier curve using adaptative tesselation
+//      [control_points]        an array of 8 floats that represent the control points coordinates (x, y)
+//      [width]
 uint32_t od_draw_cubic_bezier(struct onedraw* r, const float* control_points, float width, draw_color srgb_color);
 
 #ifdef __cplusplus
