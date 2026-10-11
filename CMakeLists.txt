@@ -9,7 +9,7 @@ else()
     set(CMAKE_C_FLAGS_DEBUG "-g -O0 -DDEBUG -Wall -Wextra")
     set(CMAKE_C_FLAGS_RELEASE "-O3 -Wall -Wextra")
 endif()
-set(WGPU_VERSION "27.0.4.0")
+set(WGPU_VERSION "29.0.1.1")
 set(WGPU_BUILD_TYPE "debug")  # or release
 
 # ---- wgpu ---

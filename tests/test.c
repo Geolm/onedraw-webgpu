@@ -132,6 +132,12 @@ void fill_texture_array(void)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+static void tmp_log(const char* s)
+{
+    fprintf(stderr, "[onedraw] %s\n", s);
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
 void init(void)
 {
     int width, height;
@@ -146,6 +152,7 @@ void init(void)
     g_renderer = od_init( &(onedraw_def)
     {
         .device = g_wgpu.device,
+        .log_func = tmp_log,
         .viewport_width = width,
         .viewport_height = height,
         .srgb_rendertarget = true,
@@ -491,19 +498,32 @@ void frame(void)
 
     g_last_surface_status = surfaceTexture.status;
 
-    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
-        surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+    // wgpu 29 reports Occluded (0x30001) when the window is hidden behind another window (or in a
+    // headless environment): the surface is healthy but produces a NULL texture, so we must not
+    // render to it. wgpu 27 did not detect occlusion and reported SuccessOptimal here, so this is
+    // a new state to handle. Like a stale/suboptimal frame, we present without drawing to drain
+    // the surface and resume normal rendering once it becomes visible again.
+    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+    {
+        if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal &&
+            surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_Occluded)
+            return;
+
+        wgpuSurfacePresent(g_wgpu.surface);
+        wgpuTextureViewRelease(surfaceTexture.texture);
+        wgpuTextureRelease(surfaceTexture.texture);
         return;
+    }
 
     WGPUTextureView frame = wgpuTextureCreateView(surfaceTexture.texture, NULL);
 
     int width, height;
     glfwGetFramebufferSize(g_window, &width, &height);
 
-    // After a surface reconfigure, queued textures come back at the old size (suboptimal), and the framebuffer
-    // can be 0x0 during window transitions (od_resize asserts > 16). Present without drawing to drain them,
-    // then resume normal rendering.
-    if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal || width == 0 || height == 0)
+    // After a surface reconfigure, queued textures come back at the old size, and the framebuffer
+    // can be 0x0 during window transitions (od_resize asserts > 16). Present without drawing to
+    // drain them, then resume normal rendering.
+    if (width == 0 || height == 0)
     {
         wgpuSurfacePresent(g_wgpu.surface);
         wgpuTextureViewRelease(frame);
@@ -515,6 +535,12 @@ void frame(void)
     all_primitives((float)width, (float)height);
     od_end_frame(g_renderer, frame);
     od_get_stats(g_renderer, &g_stats);
+
+    { // TEMP: verify timestamp readback
+        static uint32_t dbg = 0;
+        if (dbg++ % 50 == 0)
+            fprintf(stderr, "[debug] gpu_time = %.4f ms\n", g_stats.gpu_time_ms);
+    }
 
     if (g_screenshot)
     {
@@ -664,7 +690,8 @@ int main(int argc, char* argv[])
 
     glfwGetFramebufferSize(g_window, &fb_width, &fb_height);
     if ((uint32_t)fb_width != original_framebuffer_width || (uint32_t)fb_height != original_framebuffer_height ||
-        g_last_surface_status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+        (g_last_surface_status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+         g_last_surface_status != WGPUSurfaceGetCurrentTextureStatus_Occluded))
     {
         fprintf(stderr, "resize: FAIL: after round-trip framebuffer is %dx%d (expected %ux%u), surface status %d\n",
                 fb_width, fb_height, original_framebuffer_width, original_framebuffer_height, (int)g_last_surface_status);

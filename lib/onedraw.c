@@ -27,6 +27,7 @@
 */
 
 #include "onedraw.h"
+#include <wgpu.h>
 #include <stdarg.h>
 #include <math.h>
 #include <float.h>
@@ -55,6 +56,8 @@
 #define MAX_COMMANDS (1U<<16)
 #define MAX_DRAWDATA (MAX_COMMANDS*4)
 #define MAX_CLIPS (256)
+// Number of timestamp queries recorded per frame (frame start + frame end)
+#define NUM_TIMESTAMP_QUERIES (2)
 #define OPTION_SRGB_BACKBUFFER (1U<<0)
 #define OPTION_DEBUG_BINNING (1U<<1)
 
@@ -211,7 +214,20 @@ struct onedraw
         uint32_t peak_num_draw_cmd;
         uint32_t num_draw_data;
         uint32_t frame_index;
+        float gpu_time_ms;
     } stats;
+
+    // timestamp queries (whole-frame GPU time)
+    struct
+    {
+        WGPUQuerySet query_set;
+        WGPUBuffer resolve;   // resolveQuerySet destination, then source of the staging copy (CopySrc | QueryResolve)
+        WGPUBuffer staging;   // destination of the staging copy, then mapped for the CPU (CopyDst | MapRead)
+        float timestamp_period_ns;
+        bool available;
+        bool map_pending;     // the staging buffer map is in flight
+        bool copy_done;       // the last staging copy completed and its result is still unread
+    } timestamp;
 
     struct
     {
@@ -903,7 +919,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
         .targets = &color_target
     };
 
-    WGPURenderPipelineDescriptor render_pipeline_desc = 
+    WGPURenderPipelineDescriptor render_pipeline_desc =
     {
         .layout = layout,
         .vertex = 
@@ -953,7 +969,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     WGPUComputePipelineDescriptor compute_pipeline_desc = (WGPUComputePipelineDescriptor)
     {
         .layout = layout,
-        .compute = 
+        .compute =
         {
             .module = shader,
             .entryPoint = WGPU_STRING_VIEW("tile_bin"),
@@ -967,7 +983,7 @@ void build_pso(struct onedraw* r, WGPUTextureFormat surface_format)
     compute_pipeline_desc = (WGPUComputePipelineDescriptor)
     {
         .layout = layout,
-        .compute = 
+        .compute =
         {
             .module = shader,
             .entryPoint = WGPU_STRING_VIEW("write_indirect_args"),
@@ -1271,6 +1287,53 @@ bool buffers_are_full(struct onedraw* r, size_t num_floats)
 // ---------------------------------------------------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------------------------------------------------
+// Called when the staging buffer map completes: decodes the two resolved timestamps and
+// updates the gpu_time stat. The staging buffer is then unmapped and the in-flight flag cleared.
+static void timestamp_map_cb(WGPUMapAsyncStatus status, WGPUStringView message, void* userdata1, void* userdata2)
+{
+    (void)message;
+    (void)userdata2;
+
+    struct onedraw* r = (struct onedraw*)userdata1;
+
+    if (status == WGPUMapAsyncStatus_Success)
+    {
+        const uint64_t* raw = (const uint64_t*)wgpuBufferGetMappedRange(r->timestamp.staging, 0, NUM_TIMESTAMP_QUERIES * sizeof(uint64_t));
+
+        // timestamps are reported in the device's timestamp-period units; scale to ns, then ms
+        double delta_ns = ((double)raw[1] - (double)raw[0]) * (double)r->timestamp.timestamp_period_ns;
+        r->stats.gpu_time_ms = (float)(delta_ns / 1e6);
+
+        fprintf(stderr, "[debug] map fired: raw=[%llu, %llu] period=%.3fns gpu=%.6fms\n",
+                (unsigned long long)raw[0], (unsigned long long)raw[1], (double)r->timestamp.timestamp_period_ns, (double)r->stats.gpu_time_ms);
+
+        wgpuBufferUnmap(r->timestamp.staging);
+    }
+    else
+    {
+        od_log(r, "timestamp query map failed (%d)", (int)status);
+    }
+
+    r->timestamp.map_pending = false;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
+// Called after the submitted command buffer's GPU work finishes: the resolve->staging copy
+// has completed and its result is ready to be read. Only sets a flag here (no webgpu.h
+// calls, so it can safely fire from inside wgpuInstanceProcessEvents); the staging buffer
+// map is then requested from the top level in od_begin_frame, where the copy is guaranteed
+// finished so the map cannot abort.
+static void timestamp_workdone_cb(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* userdata1, void* userdata2)
+{
+    (void)status;
+    (void)message;
+    (void)userdata2;
+
+    struct onedraw* r = (struct onedraw*)userdata1;
+    r->timestamp.copy_done = true;
+}
+
+//----------------------------------------------------------------------------------------------------------------------------
 struct onedraw* od_init(const onedraw_def* def)
 {
     od_mem_interface mem_interface = (def->mem_interface != NULL) ? (*def->mem_interface) : default_allocator();
@@ -1329,6 +1392,56 @@ struct onedraw* od_init(const onedraw_def* def)
     build_layout(r);
     build_bind_groups(r);
     build_pso(r, def->surface_format);
+
+    // timestamp queries: measure the whole-frame GPU time. In wgpu-native, writeTimestamp
+    // requires the native TIMESTAMP_QUERY_INSIDE_ENCODERS feature (the standard webgpu
+    // timestamp-query feature alone is not sufficient for the encoder write). Gate on the
+    // native feature: it is the binding requirement and implies the standard one needed by
+    // createQuerySet/resolveQuerySet. If absent, gpu_time stays 0 and no queries are recorded.
+    if (wgpuDeviceHasFeature(r->device, (WGPUFeatureName)WGPUNativeFeature_TimestampQueryInsideEncoders))
+    {
+        r->timestamp.query_set = wgpuDeviceCreateQuerySet(r->device, &(WGPUQuerySetDescriptor)
+        {
+            .label = WGPU_STRING_VIEW("frame_timestamps"),
+            .type = WGPUQueryType_Timestamp,
+            .count = NUM_TIMESTAMP_QUERIES
+        });
+        assert_msg(r->timestamp.query_set != NULL, "failed to create timestamp query set");
+
+        // resolve buffer: destination of resolveQuerySet, then the source of the buffer copy
+        // to the staging buffer. It is NOT mappable: a MAP usage may only be combined with
+        // the opposite COPY usage, which would clash with QueryResolve.
+        r->timestamp.resolve = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        {
+            .label = WGPU_STRING_VIEW("frame_timestamps_results"),
+            .mappedAtCreation = false,
+            .size = NUM_TIMESTAMP_QUERIES * sizeof(uint64_t),
+            .usage = WGPUBufferUsage_CopySrc | WGPUBufferUsage_QueryResolve
+        });
+        assert_msg(r->timestamp.resolve != NULL, "failed to create timestamp resolve buffer");
+
+        // staging buffer: destination of the resolve -> staging copy, then mapped (MapRead
+        // pairs with the opposite COPY usage, CopyDst) and read back by the CPU.
+        r->timestamp.staging = wgpuDeviceCreateBuffer(r->device, &(WGPUBufferDescriptor)
+        {
+            .label = WGPU_STRING_VIEW("frame_timestamps_staging"),
+            .mappedAtCreation = false,
+            .size = NUM_TIMESTAMP_QUERIES * sizeof(uint64_t),
+            .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead
+        });
+        assert_msg(r->timestamp.staging != NULL, "failed to create timestamp staging buffer");
+
+        // wgpuQueueGetTimestampPeriod is a wgpu-native extension that returns the device's
+        // timestamp period in ns (raw timestamps must be scaled by it to get real time).
+        r->timestamp.timestamp_period_ns = wgpuQueueGetTimestampPeriod(r->queue);
+        r->timestamp.available = true;
+
+        od_log(r, "timestamp queries enabled (period = %g ns)", (double)r->timestamp.timestamp_period_ns);
+    }
+    else
+    {
+        od_log(r, "timestamp query feature not supported, gpu_time will be 0");
+    }
 
     return r;
 }
@@ -1420,6 +1533,25 @@ void od_begin_frame(struct onedraw* r)
     // push default clip rect
     vec4 no_clip = (vec4) {.x = 0.f, .y = 0.f, .z = (float)r->rasterizer.width, .w = (float)r->rasterizer.height};
     DB_PUSH(&r->commands.clipshapes, vec4, no_clip);
+
+    // Map the staging buffer to read the previous frame's resolved timestamps. Only do so
+    // once the last copy has completed (copy_done, signalled by the workdone callback) and
+    // no map is already in flight. Issuing it here (top-level) after the caller pumped events
+    // means the copy is done, so the map cannot abort; and because a copy is only recorded in
+    // od_end_frame when no map is in flight, a map and a staging copy never overlap.
+    if (r->timestamp.available && r->timestamp.copy_done && !r->timestamp.map_pending)
+    {
+        r->timestamp.map_pending = true;
+        r->timestamp.copy_done = false;
+
+        WGPUBufferMapCallbackInfo cb_info =
+        {
+            .mode = WGPUCallbackMode_AllowProcessEvents,
+            .callback = timestamp_map_cb,
+            .userdata1 = r
+        };
+        (void)wgpuBufferMapAsync(r->timestamp.staging, WGPUMapMode_Read, 0, NUM_TIMESTAMP_QUERIES * sizeof(uint64_t), cb_info);
+    }
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -1461,6 +1593,12 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     WGPUCommandEncoderDescriptor encoder_desc = {0};
     WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(r->device, &encoder_desc);
+
+    // record a timestamp before the frame's work begins, paired with the resolveQuerySet
+    // below; both are skipped together while the staging buffer map is in flight so that
+    // writeTimestamp is never left without its resolve (which would abort the command buffer)
+    if (r->timestamp.available && !r->timestamp.map_pending)
+        wgpuCommandEncoderWriteTimestamp(encoder, r->timestamp.query_set, 0);
 
     // clear counter
     wgpuCommandEncoderClearBuffer(encoder, r->tiles.counters, 0, sizeof(uint32_t) * 2);
@@ -1520,15 +1658,36 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 
     wgpuRenderPassEncoderEnd(pass);
     wgpuRenderPassEncoderRelease(pass);
-    
+
+    // Record a timestamp after all of the frame's work, resolve both timestamps into the
+    // resolve buffer, and copy them to the staging buffer for the CPU to read back. The
+    // writeTimestamp must not be recorded while the staging buffer map is in flight (that
+    // would abort the map and invalidate this command buffer, corrupting the frame), so the
+    // whole query is skipped while a map is in flight.
+    if (r->timestamp.available && !r->timestamp.map_pending)
+    {
+        wgpuCommandEncoderWriteTimestamp(encoder, r->timestamp.query_set, 1);
+        wgpuCommandEncoderResolveQuerySet(encoder, r->timestamp.query_set, 0, NUM_TIMESTAMP_QUERIES, r->timestamp.resolve, 0);
+        wgpuCommandEncoderCopyBufferToBuffer(encoder, r->timestamp.resolve, 0, r->timestamp.staging, 0, NUM_TIMESTAMP_QUERIES * sizeof(uint64_t));
+    }
 
     WGPUCommandBufferDescriptor cmd_buffer_desc = {0};
     WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
-
     wgpuCommandEncoderRelease(encoder);
 
     WGPUQueue queue = wgpuDeviceGetQueue(r->device);
     wgpuQueueSubmit(queue, 1, &cmd);
+
+    if (r->timestamp.available && !r->timestamp.map_pending)
+    {
+        WGPUQueueWorkDoneCallbackInfo done_info =
+        {
+            .mode = WGPUCallbackMode_AllowProcessEvents,
+            .callback = timestamp_workdone_cb,
+            .userdata1 = r
+        };
+        (void)wgpuQueueOnSubmittedWorkDone(queue, done_info);
+    }
 
     wgpuCommandBufferRelease(cmd);
 }
@@ -1536,9 +1695,7 @@ void od_end_frame(struct onedraw* r, WGPUTextureView target_view)
 //-----------------------------------------------------------------------------------------------------------------------------
 float od_get_gputime(struct onedraw* r)
 {
-    UNUSED_VARIABLE(r);
-    assert(false);
-    return 0;
+    return r->stats.gpu_time_ms;
 }
 
 //----------------------------------------------------------------------------------------------------------------------------
@@ -1565,6 +1722,9 @@ void od_terminate(struct onedraw* r)
     SAFE_RELEASE(r->rasterizer.pso, wgpuRenderPipelineRelease);
     SAFE_RELEASE(r->tiles.binning_pso, wgpuComputePipelineRelease);
     SAFE_RELEASE(r->tiles.write_indirect_buffer_pso, wgpuComputePipelineRelease);
+    SAFE_RELEASE(r->timestamp.resolve, wgpuBufferRelease);
+    SAFE_RELEASE(r->timestamp.staging, wgpuBufferRelease);
+    SAFE_RELEASE(r->timestamp.query_set, wgpuQuerySetRelease);
     r->mem_interface.free_fn(r, r->mem_interface.user);
 }
 
@@ -1574,6 +1734,7 @@ void od_get_stats(const struct onedraw* r, od_stats* stats)
     stats->num_draw_cmd = r->stats.num_draw_data;
     stats->peak_num_draw_cmd = r->stats.peak_num_draw_cmd;
     stats->frame_index = r->stats.frame_index;
+    stats->gpu_time_ms = r->stats.gpu_time_ms;
     stats->gpu_memory_usage = dynamic_buffer_get_gpu_mem(&r->commands.aabb);
     stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.clipshapes);
     stats->gpu_memory_usage += dynamic_buffer_get_gpu_mem(&r->commands.colors);

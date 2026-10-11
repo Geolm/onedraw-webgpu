@@ -125,6 +125,15 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
     WGPUAdapterInfo adapter_info;
     wgpuAdapterGetInfo(wgpu->adapter, &adapter_info);
 
+    // Query the adapter's actual limits and request them on the device. Without an explicit
+    // requiredLimits the device falls back to the WebGPU spec minimums (e.g.
+    // maxStorageBuffersPerShaderStage = 8), which is too low for the binning compute stage
+    // (10 storage buffer bindings). The adapter can support far more, so use its real max.
+    WGPULimits limits = WGPU_LIMITS_INIT;
+    wgpuAdapterGetLimits(wgpu->adapter, &limits);
+    fprintf(stdout, "ADAPTER LIMITS: maxStorageBuffersPerShaderStage=%u  maxUniformBuffersPerShaderStage=%u\n",
+            limits.maxStorageBuffersPerShaderStage, limits.maxUniformBuffersPerShaderStage);
+
     fprintf(stdout, "\n== WebGPU Adapter Info:\n");
     fprintf(stdout, "Vendor: %.*s\n", (int)adapter_info.vendor.length, adapter_info.vendor.data);
     fprintf(stdout, "Architecture: %.*s\n", (int)adapter_info.architecture.length, adapter_info.architecture.data);
@@ -146,8 +155,27 @@ void init_webgpu(webgpu_platform* wgpu, struct GLFWwindow* window)
     };
 
     WGPUDeviceDescriptor device_desc = {.uncapturedErrorCallbackInfo = {.callback = device_error_callback}};
+
+    // Request the adapter's maximum limits so the device isn't clamped to the spec minimums.
+    device_desc.requiredLimits = &limits;
+
+    // Request the timestamp-query features (needed for frame timing) if the adapter supports them.
+    // wgpu-native needs both the standard webgpu feature (query set + resolve) and the native
+    // TIMESTAMP_QUERY_INSIDE_ENCODERS feature (for commandEncoderWriteTimestamp).
+    if (wgpuAdapterHasFeature(wgpu->adapter, WGPUFeatureName_TimestampQuery) &&
+        wgpuAdapterHasFeature(wgpu->adapter, (WGPUFeatureName)WGPUNativeFeature_TimestampQueryInsideEncoders))
+    {
+        WGPUFeatureName features[2] =
+        {
+            WGPUFeatureName_TimestampQuery,
+            (WGPUFeatureName)WGPUNativeFeature_TimestampQueryInsideEncoders,
+        };
+        device_desc.requiredFeatureCount = 2;
+        device_desc.requiredFeatures = features;
+    }
+
     wgpuAdapterRequestDevice(wgpu->adapter, &device_desc, device_cb_info);
-    while (wgpu->device == NULL) 
+    while (wgpu->device == NULL)
         wgpuInstanceProcessEvents(wgpu->instance);
 
     // Surface capabilities

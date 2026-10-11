@@ -1,6 +1,7 @@
 #ifndef SOKOL_NATIVE_WEBGPU
 
 #include <webgpu.h>
+#include <wgpu.h>
 #include <GLFW/glfw3.h>
 
 typedef struct webgpu_platform
