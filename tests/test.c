@@ -9,6 +9,9 @@
 #include "native_webgpu.h"
 #include "../lib/onedraw.h"
 
+#define SOKOL_TIME_IMPL
+#include "sokol_time.h"
+
 #define ATLAS_SIZE (256)
 #define FROM_HTML(html)   ((html&0xff)<<16) | ((html>>16)&0xff) | (html&0x00ff00) | 0xff000000
 
@@ -502,7 +505,8 @@ void frame(void)
     // headless environment): the surface is healthy but produces a NULL texture, so we must not
     // render to it. wgpu 27 did not detect occlusion and reported SuccessOptimal here, so this is
     // a new state to handle. Like a stale/suboptimal frame, we present without drawing to drain
-    // the surface and resume normal rendering once it becomes visible again.
+    // the surface and resume normal rendering once it becomes visible again. Note: no texture view
+    // is created in this path, so there is nothing to release as a view.
     if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
     {
         if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal &&
@@ -510,8 +514,9 @@ void frame(void)
             return;
 
         wgpuSurfacePresent(g_wgpu.surface);
-        wgpuTextureViewRelease(surfaceTexture.texture);
-        wgpuTextureRelease(surfaceTexture.texture);
+        // The texture is NULL when occluded; only release a view/texture that actually exists.
+        if (surfaceTexture.texture)
+            wgpuTextureRelease(surfaceTexture.texture);
         return;
     }
 
@@ -644,30 +649,44 @@ int main(int argc, char* argv[])
     bool resized = false;
     bool restored = false;
 
-    uint32_t frame_count = 0;
-    while (!glfwWindowShouldClose(g_window))
+    // Time-based scheduling (all times measured from renderer start in ns)
+    stm_setup();
+    uint64_t start = stm_now();
+    bool shot0 = false;
+    bool shot1 = false;
+    bool quit = false;
+
+    while (!glfwWindowShouldClose(g_window) && !quit)
     {
-        if (frame_count == 30)
+        double elapsed = stm_sec(stm_since(start));
+
+        if (elapsed >= 1.0 && !shot0)
         {
             g_screenshot_path = "test0.bmp";
             g_screenshot = true;
+            shot0 = true;
         }
-        else if (frame_count == 35 && !resized)
+        else if (elapsed >= 2.0 && !resized)
         {
             // Half the logical size : the size callback reconfigures the surface and grows the renderer.
             glfwSetWindowSize(g_window, (int)window_width/2, (int)window_height/2);
             resized = true;
         }
-        else if (frame_count == 65 && resized && !restored)
+        else if (elapsed >= 2.5 && resized && !restored)
         {
             // Restore the original size : the renderer shrinks again, exercising both directions of the resize.
             glfwSetWindowSize(g_window, (int)window_width, (int)window_height);
             restored = true;
         }
-        else if (frame_count == 95 && restored)
+        else if (elapsed >= 3.0 && !shot1)
         {
             g_screenshot_path = "test1.bmp";
             g_screenshot = true;
+            shot1 = true;
+        }
+        else if (elapsed >= 5.0 && automatic_exit)
+        {
+            quit = true;
         }
 
         frame();
@@ -675,9 +694,6 @@ int main(int argc, char* argv[])
 
         // wgpu-native is single-threaded: async map callbacks only fire while events are pumped
         wgpuInstanceProcessEvents(g_wgpu.instance);
-
-        if (++frame_count >= 130 && automatic_exit)
-            break;
     }
 
     // The scripted round-trip must have completed, and the window must be back at the original framebuffer
