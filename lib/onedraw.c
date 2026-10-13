@@ -1351,9 +1351,6 @@ static void timestamp_map_cb(WGPUMapAsyncStatus status, WGPUStringView message, 
         double delta_ns = ((double)raw[1] - (double)raw[0]) * (double)r->timestamp.timestamp_period_ns;
         r->stats.gpu_time_ms = (float)(delta_ns / 1e6);
 
-        fprintf(stderr, "[debug] map fired: raw=[%llu, %llu] period=%.3fns gpu=%.6fms\n",
-                (unsigned long long)raw[0], (unsigned long long)raw[1], (double)r->timestamp.timestamp_period_ns, (double)r->stats.gpu_time_ms);
-
         wgpuBufferUnmap(r->timestamp.staging);
     }
     else
