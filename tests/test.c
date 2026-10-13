@@ -8,6 +8,8 @@
 
 #include "native_webgpu.h"
 #include "../lib/onedraw.h"
+#include "../lib/default_font.h"
+#include "../lib/default_font_atlas.h"
 
 #define SOKOL_TIME_IMPL
 #include "sokol_time.h"
@@ -611,6 +613,82 @@ void size_cb(struct GLFWwindow* window, int width, int height)
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
+// Regression test for the user font + font scale features. Runs after the golden
+// screenshot loop so it never disturbs the reference image. It asserts the metrics
+// scale linearly with od_set_font_scale() and that od_set_font() reloads a working font.
+static bool font_regression_test(void)
+{
+    // Baseline metrics at the default scale (1.0) with the built-in font.
+    float base_height = od_get_text_height(g_renderer);
+    float base_width = od_get_text_width(g_renderer, "test");
+
+    // The metrics must be finite and positive for the built-in font.
+    if (!(base_height > 0.f) || !(base_width > 0.f))
+    {
+        fprintf(stderr, "font: FAIL: baseline metrics invalid (height=%f width=%f)\n", base_height, base_width);
+        return false;
+    }
+
+    // A relative tolerance to absorb floating-point summation order.
+    bool ok = true;
+
+    od_set_font_scale(g_renderer, 2.0f);
+    if (fabsf(od_get_text_height(g_renderer) - base_height * 2.0f) > base_height * 2.0f * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text height did not double (got %f, expected ~%f)\n",
+                od_get_text_height(g_renderer), base_height * 2.0f);
+        ok = false;
+    }
+    if (fabsf(od_get_text_width(g_renderer, "test") - base_width * 2.0f) > base_width * 2.0f * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text width did not double (got %f, expected ~%f)\n",
+                od_get_text_width(g_renderer, "test"), base_width * 2.0f);
+        ok = false;
+    }
+
+    od_set_font_scale(g_renderer, 0.5f);
+    if (fabsf(od_get_text_height(g_renderer) - base_height * 0.5f) > base_height * 0.5f * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text height did not halve (got %f, expected ~%f)\n",
+                od_get_text_height(g_renderer), base_height * 0.5f);
+        ok = false;
+    }
+    if (fabsf(od_get_text_width(g_renderer, "test") - base_width * 0.5f) > base_width * 0.5f * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text width did not halve (got %f, expected ~%f)\n",
+                od_get_text_width(g_renderer, "test"), base_width * 0.5f);
+        ok = false;
+    }
+
+    // A no-op scale change must be accepted without error.
+    od_set_font_scale(g_renderer, 1.0f);
+
+    // Reload the built-in font through the public upload API. This exercises the
+    // texture recreation, atlas upload and glyph re-upload paths; the metrics must
+    // be unchanged because the descriptor is identical to the built-in one.
+    od_font desc;
+    memcpy(&desc, default_font, default_font_size);
+    od_set_font(g_renderer, &desc, default_font_atlas);
+
+    if (fabsf(od_get_text_height(g_renderer) - base_height) > base_height * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text height changed after od_set_font (got %f, expected ~%f)\n",
+                od_get_text_height(g_renderer), base_height);
+        ok = false;
+    }
+    if (fabsf(od_get_text_width(g_renderer, "test") - base_width) > base_width * 1e-3f)
+    {
+        fprintf(stderr, "font: FAIL: text width changed after od_set_font (got %f, expected ~%f)\n",
+                od_get_text_width(g_renderer, "test"), base_width);
+        ok = false;
+    }
+
+    if (ok)
+        printf("font: PASS: scale and font upload behave correctly\n");
+    return ok;
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
     bool automatic_exit = true;
@@ -716,13 +794,16 @@ int main(int argc, char* argv[])
 
     printf("resize: PASS: round-trip restored %ux%u framebuffer, surface optimal\n", original_framebuffer_width, original_framebuffer_height);
 
+    // Exercise the user font + font scale features after the golden screenshots, then tear down.
+    bool font_test_failed = font_regression_test();
     cleanup();
 
     // The unit test : both screenshots must match tests/reference.bmp (pixel-identical or PSNR > 45 dB).
     // The demo is deterministic (fixed seed, layout proportional to the framebuffer), so the restored size
     // reproduces the original image : this asserts the full resize round-trip, including the rebuilt bind groups.
     return compare_screenshots("test0.bmp", "tests/reference.bmp") ||
-           compare_screenshots("test1.bmp", "tests/reference.bmp");
+           compare_screenshots("test1.bmp", "tests/reference.bmp") ||
+           font_test_failed;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------

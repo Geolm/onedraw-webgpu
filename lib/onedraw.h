@@ -193,6 +193,27 @@ void od_set_cliprect(struct onedraw* r, float min_x, float min_y, float max_x, f
 void od_set_culling_debug(struct onedraw* r, bool b);
 
 //-----------------------------------------------------------------------------------------------------------------------------
+// Replaces the font used to draw text. Call after od_init(), before drawing.
+//      [font]          pointer to an od_font descriptor generated externally (see the
+//                      prebuild/ builder for a sample tool). The glyph table may hold at
+//                      most MAX_GLYPHS entries; [num_glyphs] tracks the valid count.
+//      [atlas_r8]      tightly packed R8 (one byte per pixel) atlas of
+//                      font->texture_width * font->texture_height pixels. Glyph pixels
+//                      are expected as alpha distance values, 1 = inside the glyph.
+//
+// warning: the previous font texture is replaced. The new atlas is sampled on the next
+//          frame; upload it while no frame is in flight to avoid a brief blank frame.
+void od_set_font(struct onedraw* r, const od_font* font, const void* atlas_r8);
+
+//-----------------------------------------------------------------------------------------------------------------------------
+// Scales the rendered size of text (glyph size, bearings, advances and line height).
+//      [scale]         uniform scale factor applied to the font, must be > 0
+//
+// The default is 1.0. This does not re-bake the atlas; it only rescales the baked
+// glyphs, so the on-screen size of each character (and its aabb) is multiplied by [scale].
+void od_set_font_scale(struct onedraw* r, float scale);
+
+//-----------------------------------------------------------------------------------------------------------------------------
 // Begins a group
 //      [op]                operation between primitives within the group
 //      [outline_width]     if equals to zero = no outline

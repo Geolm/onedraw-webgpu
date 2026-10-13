@@ -15,7 +15,7 @@ onedraw-webgpu is designed to render everything in a single draw call, maximizin
 * Shader-based alpha blending : all blending operations are handled in the shader, no framebuffer read/write required.
 * Anti-aliasing :  smooth edges using signed distance functions.
 * Lightweight and minimal : drop-in library with minimal dependencies, everthing in C11
-* Baked font, ready-to-use debug text rendering 
+* Baked font, ready-to-use debug text rendering : a default font is baked at build time, and `od_set_font()` lets you swap in your own pre-baked atlas.
 * Wide shape support : box, blurred box, rectangle, oriented box/rectangle, triangle, triangle ring, disc, circle, ellipse, arc, sector, textured quad, oriented textured quad.
 * Shape operations : union
 * Outline
